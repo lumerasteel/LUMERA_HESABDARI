@@ -2033,14 +2033,16 @@ function reportData(period){
   let lumera = 0, drafting = 0;
   counted.forEach(inv=>{
     const t = computeInvoiceTotals(inv);
-    if(inv.activityType==='drafting') drafting += t.grandTotal;
-    else lumera += t.grandTotal;
+    if(inv.activityType==='drafting') drafting += t.paid; else lumera += t.paid;
   });
-  // بستانکاری: مانده فاکتورهای صادرشده (هنوز تسویه نشده) در همین بازه
-  const unpaid = invoices.filter(inv=> inv.status==='final' && inv.date>=start && inv.date<=end);
-  let receivable = 0;
-  unpaid.forEach(inv=>{ receivable += computeInvoiceTotals(inv).grandTotal; });
-  return { lumera, drafting, total: lumera+drafting, count: counted.length, start, end, receivable, unpaidCount: unpaid.length };
+  // بستانکاری: مانده واقعی همه فاکتورهای صادرشده یا تسویه‌شده در همین بازه (هر مقدار باقی‌مانده)
+  const withBalance = invoices.filter(inv=> (inv.status==='final'||inv.status==='paid') && inv.date>=start && inv.date<=end);
+  let receivable = 0, unpaidCount = 0;
+  withBalance.forEach(inv=>{
+    const t = computeInvoiceTotals(inv);
+    if(t.balance>0){ receivable += t.balance; unpaidCount++; }
+  });
+  return { lumera, drafting, total: lumera+drafting, count: counted.length, start, end, receivable, unpaidCount };
 }
 
 const REPORT_PERIOD_LABELS = { week:'هفتگی', month:'ماهانه', q3:'سه‌ماهه', q6:'شش‌ماهه', year:'سالانه' };
@@ -2053,14 +2055,16 @@ function allTimeTotals(){
   let lumera = 0, drafting = 0;
   counted.forEach(inv=>{
     const t = computeInvoiceTotals(inv);
-    if(inv.activityType==='drafting') drafting += t.grandTotal;
-    else lumera += t.grandTotal;
+    if(inv.activityType==='drafting') drafting += t.paid; else lumera += t.paid;
   });
-  // جمع کل بستانکاری از فاکتورهای صادرشده که هنوز تسویه نشده‌اند
-  const unpaid = invoices.filter(inv=> inv.status==='final');
-  let receivable = 0;
-  unpaid.forEach(inv=>{ receivable += computeInvoiceTotals(inv).grandTotal; });
-  return { lumera, drafting, total: lumera+drafting, count: counted.length, receivable, unpaidCount: unpaid.length };
+  // جمع کل بستانکاری از همه فاکتورهای صادرشده/تسویه‌شده‌ای که هنوز مانده دارند
+  const withBalance = invoices.filter(inv=> inv.status==='final'||inv.status==='paid');
+  let receivable = 0, unpaidCount = 0;
+  withBalance.forEach(inv=>{
+    const t = computeInvoiceTotals(inv);
+    if(t.balance>0){ receivable += t.balance; unpaidCount++; }
+  });
+  return { lumera, drafting, total: lumera+drafting, count: counted.length, receivable, unpaidCount };
 }
 
 function customerReportData(){
@@ -2140,7 +2144,7 @@ function dashboardStats(){
   let lumera=0, drafting=0;
   invoices.filter(i=> i.status==='paid' && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
     const t = computeInvoiceTotals(inv);
-    if(inv.activityType==='drafting') drafting += t.grandTotal; else lumera += t.grandTotal;
+    if(inv.activityType==='drafting') drafting += t.paid; else lumera += t.paid;
   });
   return { activeProjects, openDrafts, custDebt, custCredit, lumera, drafting };
 }
