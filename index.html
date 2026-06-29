@@ -2013,21 +2013,27 @@ function bindExpensesEvents(){
 
 // ===== تب گزارش =====
 let reportPeriod = 'month'; // week | month | q3 | q6 | year
-let reportStartDate = todayStr();
+let reportStartDate = null; // null یعنی خودکار: بازه از عقب تا امروز محاسبه شود
+let reportEndDate = todayStr();
 
-function periodRange(period, startDateStr){
-  const start = new Date(startDateStr || reportStartDate);
-  const end = new Date(start);
-  if(period==='week') end.setDate(end.getDate()+7);
-  else if(period==='month') end.setMonth(end.getMonth()+1);
-  else if(period==='q3') end.setMonth(end.getMonth()+3);
-  else if(period==='q6') end.setMonth(end.getMonth()+6);
-  else if(period==='year') end.setFullYear(end.getFullYear()+1);
+// بازه را از «امروز به عقب» حساب می‌کند، نه از تاریخ شروع به جلو
+// مثلاً «ماهانه» یعنی از یک ماه قبل تا امروز
+function periodRange(period, manualStartDateStr){
+  const end = new Date(reportEndDate);
+  if(manualStartDateStr){
+    return { start: manualStartDateStr, end: end.toISOString().slice(0,10) };
+  }
+  const start = new Date(end);
+  if(period==='week') start.setDate(start.getDate()-7);
+  else if(period==='month') start.setMonth(start.getMonth()-1);
+  else if(period==='q3') start.setMonth(start.getMonth()-3);
+  else if(period==='q6') start.setMonth(start.getMonth()-6);
+  else if(period==='year') start.setFullYear(start.getFullYear()-1);
   return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
 }
 
 function reportData(period){
-  const {start, end} = periodRange(period);
+  const {start, end} = periodRange(period, reportStartDate);
   // فقط فاکتورهای واقعاً تسویه‌شده (پول دریافت‌شده) به‌عنوان درآمد حساب می‌شوند
   const counted = invoices.filter(inv=> inv.status==='paid' && inv.date>=start && inv.date<=end);
   let lumera = 0, drafting = 0;
@@ -2267,8 +2273,8 @@ function renderReportTab(){
     </div>
     <div class="row-flex" style="margin-bottom:12px">
       <label class="small">از تاریخ:</label>
-      ${renderJalaliDateInput('reportStartDateInput', reportStartDate, 'flex:1')}
-      <button id="reportTodayBtn" class="btn btn-outline">امروز</button>
+      ${renderJalaliDateInput('reportStartDateInput', d.start, 'flex:1')}
+      <button id="reportTodayBtn" class="btn btn-outline">خودکار</button>
     </div>
     <div class="card">
       <div class="card-title"><span>گزارش ${REPORT_PERIOD_LABELS[reportPeriod]}</span></div>
@@ -2313,15 +2319,16 @@ function bindReportEvents(){
   document.querySelectorAll('.report-period-btn').forEach(el=>{
     el.addEventListener('click', e=>{
       reportPeriod = e.currentTarget.dataset.period;
+      reportStartDate = null; // با تغییر دوره، حالت دستی لغو می‌شود و بازه خودکار محاسبه می‌شود
       render();
     });
   });
   bindJalaliDateInput('reportStartDateInput', iso=>{
-    reportStartDate = iso || todayStr();
+    reportStartDate = iso || null;
     render();
   });
   document.getElementById('reportTodayBtn')?.addEventListener('click', ()=>{
-    reportStartDate = todayStr();
+    reportStartDate = null; // بازگشت به محاسبه خودکار بر اساس دوره انتخاب‌شده
     render();
   });
 }
