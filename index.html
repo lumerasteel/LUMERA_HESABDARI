@@ -2028,14 +2028,19 @@ function periodRange(period, startDateStr){
 
 function reportData(period){
   const {start, end} = periodRange(period);
-  const counted = invoices.filter(inv=> (inv.status==='final' || inv.status==='paid') && inv.date>=start && inv.date<=end);
+  // فقط فاکتورهای واقعاً تسویه‌شده (پول دریافت‌شده) به‌عنوان درآمد حساب می‌شوند
+  const counted = invoices.filter(inv=> inv.status==='paid' && inv.date>=start && inv.date<=end);
   let lumera = 0, drafting = 0;
   counted.forEach(inv=>{
     const t = computeInvoiceTotals(inv);
     if(inv.activityType==='drafting') drafting += t.grandTotal;
     else lumera += t.grandTotal;
   });
-  return { lumera, drafting, total: lumera+drafting, count: counted.length, start, end };
+  // بستانکاری: مانده فاکتورهای صادرشده (هنوز تسویه نشده) در همین بازه
+  const unpaid = invoices.filter(inv=> inv.status==='final' && inv.date>=start && inv.date<=end);
+  let receivable = 0;
+  unpaid.forEach(inv=>{ receivable += computeInvoiceTotals(inv).grandTotal; });
+  return { lumera, drafting, total: lumera+drafting, count: counted.length, start, end, receivable, unpaidCount: unpaid.length };
 }
 
 const REPORT_PERIOD_LABELS = { week:'هفتگی', month:'ماهانه', q3:'سه‌ماهه', q6:'شش‌ماهه', year:'سالانه' };
@@ -2043,14 +2048,19 @@ const REPORT_PERIOD_LABELS = { week:'هفتگی', month:'ماهانه', q3:'سه
 // جمع کل تاریخی همه فاکتورهای صادرشده/تسویه‌شده — بدون هیچ فیلتر تاریخی
 // این عدد هیچ‌وقت به‌خاطر بازه گزارش یا offset تاریخ، فاکتوری را گم نمی‌کند
 function allTimeTotals(){
-  const counted = invoices.filter(inv=> inv.status==='final' || inv.status==='paid');
+  // فقط فاکتورهای واقعاً تسویه‌شده (پول دریافت‌شده) — بدون فیلتر تاریخ
+  const counted = invoices.filter(inv=> inv.status==='paid');
   let lumera = 0, drafting = 0;
   counted.forEach(inv=>{
     const t = computeInvoiceTotals(inv);
     if(inv.activityType==='drafting') drafting += t.grandTotal;
     else lumera += t.grandTotal;
   });
-  return { lumera, drafting, total: lumera+drafting, count: counted.length };
+  // جمع کل بستانکاری از فاکتورهای صادرشده که هنوز تسویه نشده‌اند
+  const unpaid = invoices.filter(inv=> inv.status==='final');
+  let receivable = 0;
+  unpaid.forEach(inv=>{ receivable += computeInvoiceTotals(inv).grandTotal; });
+  return { lumera, drafting, total: lumera+drafting, count: counted.length, receivable, unpaidCount: unpaid.length };
 }
 
 function customerReportData(){
@@ -2128,7 +2138,7 @@ function dashboardStats(){
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
   const todayS = todayStr();
   let lumera=0, drafting=0;
-  invoices.filter(i=> (i.status==='final'||i.status==='paid') && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
+  invoices.filter(i=> i.status==='paid' && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
     const t = computeInvoiceTotals(inv);
     if(inv.activityType==='drafting') drafting += t.grandTotal; else lumera += t.grandTotal;
   });
@@ -2158,7 +2168,7 @@ function renderDashboardTab(){
       </div>
     </div>
     <div class="card" style="margin-bottom:18px">
-      <div class="card-title"><span>فروش این ماه (تاکنون)</span></div>
+      <div class="card-title"><span>دریافتی این ماه (تاکنون)</span></div>
       <div class="grid2" style="margin-top:4px">
         <span>ساخت LUMERA: ${fmt(s.lumera)} ت</span>
         <span>نقشه‌کشی: ${fmt(s.drafting)} ت</span>
@@ -2235,15 +2245,19 @@ function renderReportTab(){
   const best = custData.length>0 && custData[0].totalPurchase>0 ? custData[0] : null;
   return `
     <div class="card" style="margin-bottom:14px">
-      <div class="card-title"><span>جمع کل تاریخی (همه فاکتورهای صادرشده/تسویه‌شده)</span></div>
+      <div class="card-title"><span>جمع کل تاریخی (فقط فاکتورهای تسویه‌شده)</span></div>
       <div class="card-sub">${toPersianDigits(allTime.count)} فاکتور — بدون فیلتر تاریخ</div>
       <div class="grid2" style="margin-top:8px">
         <span>ساخت LUMERA: ${fmt(allTime.lumera)} ت</span>
         <span>نقشه‌کشی: ${fmt(allTime.drafting)} ت</span>
       </div>
-      <div class="r-row bold accent" style="margin-top:8px"><span>جمع کل</span><span>${fmt(allTime.total)} تومان</span></div>
+      <div class="r-row bold accent" style="margin-top:8px"><span>جمع دریافتی</span><span>${fmt(allTime.total)} تومان</span></div>
+      ${allTime.receivable>0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee">
+        <div style="font-weight:700;color:var(--red)">بستانکاری از فاکتورهای صادرشده تسویه‌نشده: ${fmt(allTime.receivable)} ت</div>
+        <div class="card-sub" style="margin-top:2px">${toPersianDigits(allTime.unpaidCount)} فاکتور هنوز دریافت نشده</div>
+      </div>` : ''}
     </div>
-    <p class="note" style="margin-bottom:10px">فقط فاکتورهای صادرشده/تسویه‌شده محاسبه می‌شوند — این گزارش فقط داخلی است</p>
+    <p class="note" style="margin-bottom:10px">فقط فاکتورهای تسویه‌شده به‌عنوان درآمد محاسبه می‌شوند — این گزارش فقط داخلی است</p>
     <div class="pills" style="margin-bottom:8px">
       ${Object.keys(REPORT_PERIOD_LABELS).map(k=>`<button class="pill report-period-btn ${reportPeriod===k?'pill-active':''}" data-period="${k}">${REPORT_PERIOD_LABELS[k]}</button>`).join('')}
     </div>
@@ -2254,7 +2268,7 @@ function renderReportTab(){
     </div>
     <div class="card">
       <div class="card-title"><span>گزارش ${REPORT_PERIOD_LABELS[reportPeriod]}</span></div>
-      <div class="card-sub">${jalaliStr(d.start)} تا ${jalaliStr(d.end)} — ${toPersianDigits(d.count)} فاکتور</div>
+      <div class="card-sub">${jalaliStr(d.start)} تا ${jalaliStr(d.end)} — ${toPersianDigits(d.count)} فاکتور تسویه‌شده</div>
       ${reportBarChart(d.lumera, d.drafting)}
       <div class="grid2" style="margin-top:8px">
         <span>ساخت LUMERA: ${fmt(d.lumera)} ت</span>
@@ -2262,6 +2276,10 @@ function renderReportTab(){
       </div>
       <div class="r-row bold accent" style="margin-top:8px"><span>جمع کل درآمد</span><span>${fmt(d.total)} تومان</span></div>
       ${leader ? `<div style="margin-top:6px;font-size:12px;color:#7A7A7A">در این بازه، درآمد ${leader==='lumera'?'ساخت LUMERA':'نقشه‌کشی'} بیشتر بوده</div>` : ''}
+      ${d.receivable>0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee">
+        <div style="font-weight:700;color:var(--red)">بستانکاری این بازه: ${fmt(d.receivable)} ت</div>
+        <div class="card-sub" style="margin-top:2px">${toPersianDigits(d.unpaidCount)} فاکتور صادرشده، هنوز تسویه نشده</div>
+      </div>` : ''}
     </div>
 
     <h2 class="sec" style="margin-top:20px">گزارش مشتریان (کل دوره)</h2>
