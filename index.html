@@ -2040,6 +2040,19 @@ function reportData(period){
 
 const REPORT_PERIOD_LABELS = { week:'هفتگی', month:'ماهانه', q3:'سه‌ماهه', q6:'شش‌ماهه', year:'سالانه' };
 
+// جمع کل تاریخی همه فاکتورهای صادرشده/تسویه‌شده — بدون هیچ فیلتر تاریخی
+// این عدد هیچ‌وقت به‌خاطر بازه گزارش یا offset تاریخ، فاکتوری را گم نمی‌کند
+function allTimeTotals(){
+  const counted = invoices.filter(inv=> inv.status==='final' || inv.status==='paid');
+  let lumera = 0, drafting = 0;
+  counted.forEach(inv=>{
+    const t = computeInvoiceTotals(inv);
+    if(inv.activityType==='drafting') drafting += t.grandTotal;
+    else lumera += t.grandTotal;
+  });
+  return { lumera, drafting, total: lumera+drafting, count: counted.length };
+}
+
 function customerReportData(){
   return customers.map(c=>{
     const counted = invoices.filter(i=> i.customerId===c.id && (i.status==='final' || i.status==='paid'));
@@ -2216,10 +2229,20 @@ function reportBarChart(lumera, drafting){
 
 function renderReportTab(){
   const d = reportData(reportPeriod);
+  const allTime = allTimeTotals();
   const leader = d.lumera===d.drafting ? null : (d.lumera>d.drafting ? 'lumera' : 'drafting');
   const custData = customerReportData();
   const best = custData.length>0 && custData[0].totalPurchase>0 ? custData[0] : null;
   return `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-title"><span>جمع کل تاریخی (همه فاکتورهای صادرشده/تسویه‌شده)</span></div>
+      <div class="card-sub">${toPersianDigits(allTime.count)} فاکتور — بدون فیلتر تاریخ</div>
+      <div class="grid2" style="margin-top:8px">
+        <span>ساخت LUMERA: ${fmt(allTime.lumera)} ت</span>
+        <span>نقشه‌کشی: ${fmt(allTime.drafting)} ت</span>
+      </div>
+      <div class="r-row bold accent" style="margin-top:8px"><span>جمع کل</span><span>${fmt(allTime.total)} تومان</span></div>
+    </div>
     <p class="note" style="margin-bottom:10px">فقط فاکتورهای صادرشده/تسویه‌شده محاسبه می‌شوند — این گزارش فقط داخلی است</p>
     <div class="pills" style="margin-bottom:8px">
       ${Object.keys(REPORT_PERIOD_LABELS).map(k=>`<button class="pill report-period-btn ${reportPeriod===k?'pill-active':''}" data-period="${k}">${REPORT_PERIOD_LABELS[k]}</button>`).join('')}
