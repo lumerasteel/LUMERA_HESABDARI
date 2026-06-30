@@ -731,6 +731,23 @@ function invoicePrevBalanceFinal(inv){
   return invoicePrevBalanceAuto(inv);
 }
 
+// فهرست فاکتورهای دیگر همین مشتری که هنوز مانده (بدهی) دارند — برای اینکه مشخص شود
+// «مانده قبلی» دقیقاً از کدام فاکتور(ها) آمده، نه فقط یک عدد بدون منبع
+function invoicePrevBalanceSources(inv){
+  if(!inv.customerId) return [];
+  return invoices
+    .filter(i=> i.customerId===inv.customerId && i.id!==inv.id && i.status!=='draft' && i.status!=='cancelled')
+    .map(i=>{ const t = computeInvoiceTotals(i); return { number: i.number, balance: t.balance }; })
+    .filter(x=> x.balance>0);
+}
+// متن کوتاه برای نشان دادن اینکه «مانده قبلی» از کدام فاکتور(ها) آمده — تا با مانده همین فاکتور اشتباه گرفته نشود
+function invoicePrevBalanceSourceText(inv){
+  if(inv.prevBalanceUseManual) return inv.prevBalanceNote ? `(${inv.prevBalanceNote})` : '(وارد شده دستی)';
+  const sources = invoicePrevBalanceSources(inv);
+  if(sources.length===0) return '';
+  return '(از فاکتور ' + sources.map(s=> '#'+(s.number||'-')).join('، ') + ')';
+}
+
 function newInvoiceFromDraft(){
   invDraft = blankInvoice();
   editingInvId = null;
@@ -851,8 +868,9 @@ function renderInvoiceListTab(){
         </div>
         <div class="grid2">
           <span>جمع کل: ${fmt(t.grandTotal)} ت</span>
-          <span style="color:${t.balance>0?'var(--red)':(t.overpaid>0?'#1A7A3A':'#1A7A3A')};font-weight:700">${t.balance>0? 'مانده: '+fmt(t.balance)+' ت' : (t.overpaid>0? 'اضافه‌پرداخت: '+fmt(t.overpaid)+' ت' : 'تسویه کامل')}</span>
+          <span style="color:${t.balance>0?'var(--red)':(t.overpaid>0?'#1A7A3A':'#1A7A3A')};font-weight:700">${t.balance>0? 'مانده این فاکتور: '+fmt(t.balance)+' ت' : (t.overpaid>0? 'اضافه‌پرداخت: '+fmt(t.overpaid)+' ت' : 'تسویه کامل')}</span>
         </div>
+        ${(()=>{ const pb = invoicePrevBalanceFinal(inv); return pb>0 ? `<div class="card-sub" style="color:var(--red);margin-top:2px">+ مانده قبلی ${invoicePrevBalanceSourceText(inv)}: ${fmt(pb)} ت</div>` : ''; })()}
         <div class="row-flex" style="margin-top:8px">
           <button class="btn btn-outline inv-edit" data-id="${inv.id}" style="flex:1;font-size:12px">ویرایش</button>
           <button class="btn btn-black inv-jpg" data-id="${inv.id}" style="flex:1;font-size:12px">خروجی JPG</button>
@@ -950,7 +968,7 @@ function renderInvoiceEditTab(){
       <div class="r-row"><span>تخفیف</span><span>${fmt(t.discount)} تومان</span></div>
       <hr class="sep">
       <div class="r-row bold accent"><span>جمع کل فاکتور</span><span>${fmt(t.grandTotal)} تومان</span></div>
-      ${prevBalFinal!==0 ? `<div class="r-row"><span>${prevBalFinal>0?'مانده قبلی (بدهکار)':'مانده قبلی (بستانکار)'}</span><span>${fmt(Math.abs(prevBalFinal))} تومان</span></div>
+      ${prevBalFinal!==0 ? `<div class="r-row"><span>${prevBalFinal>0?'مانده قبلی (بدهکار)':'مانده قبلی (بستانکار)'} ${escapeAttr(invoicePrevBalanceSourceText(invDraft))}</span><span>${fmt(Math.abs(prevBalFinal))} تومان</span></div>
       <div class="r-row bold"><span>قابل پرداخت با مانده قبلی</span><span>${fmt(t.grandTotal + prevBalFinal)} تومان</span></div>` : ''}
       <div class="r-row"><span>پرداخت‌شده</span><span>${fmt(t.paid)} تومان</span></div>
       <div class="r-row bold"><span>مانده</span><span>${fmt(t.balance)} تومان</span></div>
@@ -1090,7 +1108,7 @@ function rerenderInvoiceEdit(){
       <div class="r-row"><span>تخفیف</span><span>${fmt(t.discount)} تومان</span></div>
       <hr class="sep">
       <div class="r-row bold accent"><span>جمع کل فاکتور</span><span>${fmt(t.grandTotal)} تومان</span></div>
-      ${prevBalFinal!==0 ? `<div class="r-row"><span>${prevBalFinal>0?'مانده قبلی (بدهکار)':'مانده قبلی (بستانکار)'}</span><span>${fmt(Math.abs(prevBalFinal))} تومان</span></div>
+      ${prevBalFinal!==0 ? `<div class="r-row"><span>${prevBalFinal>0?'مانده قبلی (بدهکار)':'مانده قبلی (بستانکار)'} ${escapeAttr(invoicePrevBalanceSourceText(invDraft))}</span><span>${fmt(Math.abs(prevBalFinal))} تومان</span></div>
       <div class="r-row bold"><span>قابل پرداخت با مانده قبلی</span><span>${fmt(t.grandTotal + prevBalFinal)} تومان</span></div>` : ''}
       <div class="r-row"><span>پرداخت‌شده</span><span>${fmt(t.paid)} تومان</span></div>
       <div class="r-row bold"><span>مانده</span><span>${fmt(t.balance)} تومان</span></div>
@@ -1178,7 +1196,7 @@ function buildA4InvoiceHTML(inv){
           </div>
           <div class="a4-payment-card">
             <div class="a4-payment-title">وضعیت پرداخت</div>
-            ${prevBal!==0 ? `<div class="a4-summary-row"><span class="a4-sr-label">${prevBal>0?'مانده قبلی (بدهکار)':'مانده قبلی (بستانکار)'}</span><span class="a4-sr-value">${fmt(Math.abs(prevBal))}</span></div>` : ''}
+            ${prevBal!==0 ? `<div class="a4-summary-row"><span class="a4-sr-label">${prevBal>0?'مانده قبلی (بدهکار)':'مانده قبلی (بستانکار)'} ${invoicePrevBalanceSourceText(inv)}</span><span class="a4-sr-value">${fmt(Math.abs(prevBal))}</span></div>` : ''}
             <div class="a4-summary-row"><span class="a4-sr-label">پرداخت‌شده</span><span class="a4-sr-value">${fmt(t.paid)}</span></div>
             <div class="a4-summary-row balance"><span class="a4-sr-label">مانده ${prevBal!==0?'کل':''}</span><span class="a4-sr-value">${fmt(Math.max(0, t.balance + prevBal))}</span></div>
             ${(inv.prevBalanceNote||'').trim() ? `<div class="a4-prev-note">${escapeAttr(inv.prevBalanceNote)}</div>` : ''}
