@@ -173,7 +173,7 @@
 <div class="wrap" id="app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-const STORE_KEYS = { materials:'lumera_materials', products:'lumera_products', records:'lumera_records', invoices:'lumera_invoices', invoiceSeq:'lumera_invoiceSeq', customers:'lumera_customers', transactions:'lumera_transactions', overheadPerUnit:'lumera_overheadPerUnit', overheadPercent:'lumera_overheadPercent', suppliers:'lumera_suppliers', purchases:'lumera_purchases', reminders:'lumera_reminders', expenses:'lumera_expenses', expenseCategories:'lumera_expenseCategories' };
+const STORE_KEYS = { materials:'lumera_materials', products:'lumera_products', records:'lumera_records', invoices:'lumera_invoices', invoiceSeq:'lumera_invoiceSeq', customers:'lumera_customers', transactions:'lumera_transactions', overheadPerUnit:'lumera_overheadPerUnit', overheadPercent:'lumera_overheadPercent', suppliers:'lumera_suppliers', purchases:'lumera_purchases', reminders:'lumera_reminders', expenses:'lumera_expenses', expenseCategories:'lumera_expenseCategories', bankInfo:'lumera_bankInfo' };
 const UNITS = ['کیلوگرم','متر','متر مربع','ورق','عدد'];
 const LABOR_PRESETS = ['برش لیزر','خم‌کاری','رنگ','جوش‌کاری'];
 
@@ -365,6 +365,7 @@ let purchases = loadJSON(STORE_KEYS.purchases, []); // [{id,supplierId,date,amou
 let manualReminders = loadJSON(STORE_KEYS.reminders, []); // [{id,date,text,invoiceId,done}]
 let expenses = loadJSON(STORE_KEYS.expenses, []); // [{id,categoryName,amount,date,note,tag}]
 let expenseCategories = loadJSON(STORE_KEYS.expenseCategories, []); // [{id,name,tag,defaultAmount}]
+let bankInfo = loadJSON(STORE_KEYS.bankInfo, { cardNumber:'', sheba:'', accountOwner:'', bankName:'' }); // مشخصات واریز — یک‌بار تنظیم می‌شود و روی همه فاکتورها چاپ می‌شود
 
 let tab = 'calc';
 let editingMatId = null;
@@ -387,7 +388,7 @@ function clearCalc(){
 }
 
 /* ---------- INVOICE STATE ---------- */
-let invTab = 'list'; // 'list' | 'edit'
+let invTab = 'list'; // 'list' | 'edit' | 'bankinfo'
 let editingInvId = null;
 function blankInvoiceLine(){ return {id: Date.now().toString()+Math.random().toString(36).slice(2), productId:'', qty:1, customName:'', customPrice:''}; }
 function blankInvoice(){
@@ -853,6 +854,7 @@ function renderInvoiceListTab(){
   });
   return `
     <button id="newInvBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ فاکتور جدید</button>
+    <button id="bankInfoBtn" class="btn btn-outline" style="width:100%;margin-bottom:10px">💳 مشخصات واریز (نمایش روی فاکتور چاپی)</button>
     <input id="invSearchInput" placeholder="🔍 جستجو: شماره فاکتور، نام/تلفن مشتری، کد پروژه، تاریخ یا وضعیت" value="${escapeAttr(invSearchQuery)}" style="width:100%;margin-bottom:10px;border:1.5px solid #000">
     ${filtered.length===0? '<p class="empty">نتیجه‌ای پیدا نشد</p>' : filtered.map(inv=>{
       const t = computeInvoiceTotals(inv);
@@ -995,10 +997,38 @@ function renderInvoiceEditTab(){
   `;
 }
 function renderInvoiceTab(){
+  if(invTab==='bankinfo') return renderBankInfoTab();
   return invTab==='edit' ? renderInvoiceEditTab() : renderInvoiceListTab();
+}
+function renderBankInfoTab(){
+  return `
+    <button id="bankInfoBackBtn" class="btn btn-outline" style="margin-bottom:14px">← بازگشت به لیست فاکتورها</button>
+    <h2 class="sec">مشخصات واریز</h2>
+    <p class="note" style="margin-bottom:10px">این اطلاعات یک‌بار وارد می‌شود و روی همه فاکتورهای چاپی (خروجی JPG و چاپ) نمایش داده می‌شود</p>
+    <input id="bankCardNumber" placeholder="شماره کارت" value="${escapeAttr(bankInfo.cardNumber)}" style="margin-bottom:8px">
+    <input id="bankSheba" placeholder="شماره شبا (اختیاری)" value="${escapeAttr(bankInfo.sheba)}" style="margin-bottom:8px">
+    <input id="bankAccountOwner" placeholder="به نام" value="${escapeAttr(bankInfo.accountOwner)}" style="margin-bottom:8px">
+    <input id="bankName" placeholder="نام بانک (اختیاری)" value="${escapeAttr(bankInfo.bankName)}" style="margin-bottom:14px">
+    <button id="bankInfoSaveBtn" class="btn btn-red" style="width:100%">ذخیره</button>
+  `;
+}
+function bindBankInfoEvents(){
+  document.getElementById('bankInfoBackBtn')?.addEventListener('click', ()=>{ invTab='list'; render(); });
+  document.getElementById('bankInfoSaveBtn')?.addEventListener('click', ()=>{
+    bankInfo = {
+      cardNumber: document.getElementById('bankCardNumber').value.trim(),
+      sheba: document.getElementById('bankSheba').value.trim(),
+      accountOwner: document.getElementById('bankAccountOwner').value.trim(),
+      bankName: document.getElementById('bankName').value.trim()
+    };
+    saveJSON(STORE_KEYS.bankInfo, bankInfo);
+    invTab = 'list';
+    render();
+  });
 }
 function bindInvoiceListEvents(){
   document.getElementById('newInvBtn')?.addEventListener('click', ()=>{ newInvoiceFromDraft(); render(); });
+  document.getElementById('bankInfoBtn')?.addEventListener('click', ()=>{ invTab='bankinfo'; render(); });
   const searchEl = document.getElementById('invSearchInput');
   if(searchEl){
     searchEl.addEventListener('input', e=>{
@@ -1201,6 +1231,14 @@ function buildA4InvoiceHTML(inv){
             <div class="a4-summary-row balance"><span class="a4-sr-label">مانده ${prevBal!==0?'کل':''}</span><span class="a4-sr-value">${fmt(Math.max(0, t.balance + prevBal))}</span></div>
             ${(inv.prevBalanceNote||'').trim() ? `<div class="a4-prev-note">${escapeAttr(inv.prevBalanceNote)}</div>` : ''}
           </div>
+          ${Math.max(0, t.balance + prevBal)>0 && (bankInfo.cardNumber||bankInfo.sheba) ? `
+          <div class="a4-payment-card" style="margin-top:8px">
+            <div class="a4-payment-title">مشخصات واریز</div>
+            ${bankInfo.cardNumber ? `<div class="a4-summary-row"><span class="a4-sr-label">شماره کارت</span><span class="a4-sr-value">${escapeAttr(bankInfo.cardNumber)}</span></div>` : ''}
+            ${bankInfo.sheba ? `<div class="a4-summary-row"><span class="a4-sr-label">شبا</span><span class="a4-sr-value">${escapeAttr(bankInfo.sheba)}</span></div>` : ''}
+            ${bankInfo.accountOwner ? `<div class="a4-summary-row"><span class="a4-sr-label">به نام</span><span class="a4-sr-value">${escapeAttr(bankInfo.accountOwner)}</span></div>` : ''}
+            ${bankInfo.bankName ? `<div class="a4-summary-row"><span class="a4-sr-label">بانک</span><span class="a4-sr-value">${escapeAttr(bankInfo.bankName)}</span></div>` : ''}
+          </div>` : ''}
         </div>
       </div>
       <div class="a4-footer">
@@ -2384,7 +2422,7 @@ function render(){
     el.addEventListener('click', e=>{ tab = e.currentTarget.dataset.tab; render(); });
   });
   if(tab==='calc') bindCalcEvents();
-  if(tab==='invoice') (invTab==='edit' ? bindInvoiceEditEvents() : bindInvoiceListEvents());
+  if(tab==='invoice') (invTab==='edit' ? bindInvoiceEditEvents() : (invTab==='bankinfo' ? bindBankInfoEvents() : bindInvoiceListEvents()));
   if(tab==='customers') bindCustomersEvents();
   if(tab==='suppliers') bindSuppliersEvents();
   if(tab==='materials') bindMaterialsEvents();
@@ -2476,40 +2514,7 @@ function bindBackupEvents(){
 render();
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  const swCode = `
-    const CACHE_NAME='lumera-cache-v1';
-    const ROOT='${new URL('./', location.href).href}';
-    const SELF_URL='${location.href}';
-    self.addEventListener('install', e=>{
-      e.waitUntil(
-        caches.open(CACHE_NAME).then(cache=>cache.addAll([ROOT, SELF_URL]))
-      );
-      self.skipWaiting();
-    });
-    self.addEventListener('activate', e=>{
-      e.waitUntil(
-        caches.keys().then(keys=>Promise.all(
-          keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k))
-        ))
-      );
-      self.clients.claim();
-    });
-    self.addEventListener('fetch', e=>{
-      e.respondWith(
-        caches.match(e.request).then(cached=>{
-          if(cached) return cached;
-          return fetch(e.request).then(res=>{
-            return caches.open(CACHE_NAME).then(cache=>{
-              cache.put(e.request, res.clone());
-              return res;
-            });
-          }).catch(()=>cached || caches.match(SELF_URL));
-        })
-      );
-    });
-  `;
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  const swUrl = URL.createObjectURL(blob);
+  const swUrl = new URL('./sw.js', location.href).href;
   navigator.serviceWorker.register(swUrl, {scope:'./'}).catch(err=>console.log('SW failed:', err));
 }
 </script>
