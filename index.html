@@ -2201,8 +2201,10 @@ function dashboardStats(){
     else custCredit += bal.net;
   });
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
   const todayS = todayStr();
+  const todayJ = toJalali(now.getFullYear(), now.getMonth()+1, now.getDate());
+  const monthStartG = toGregorian(todayJ[0], todayJ[1], 1);
+  const monthStart = `${monthStartG[0]}-${String(monthStartG[1]).padStart(2,'0')}-${String(monthStartG[2]).padStart(2,'0')}`;
   let lumera=0, drafting=0;
   invoices.filter(i=> i.status==='paid' && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
     const t = computeInvoiceTotals(inv);
