@@ -4,7 +4,7 @@
 // و فقط برای حالت آفلاین (بی‌اینترنتی) از نسخه ذخیره‌شده استفاده می‌شود.
 // نسخه قبلی (اول کش) باعث می‌شد بعد از هر به‌روزرسانی، برنامه نصب‌شده رو گوشی
 // همچنان نسخه قدیمی و گاهی خراب را نشان بدهد.
-const CACHE_NAME = 'lumerasteel-v2';
+const CACHE_NAME = 'lumerasteel-v3';
 const APP_SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
