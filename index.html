@@ -475,6 +475,10 @@ function toPersianDigits(str){
   const fa = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
   return String(str).replace(/[0-9]/g, d=>fa[+d]);
 }
+function toLatinDigits(str){
+  const fa = '۰۱۲۳۴۵۶۷۸۹';
+  return String(str).replace(/[۰-۹]/g, d=>String(fa.indexOf(d)));
+}
 function jalaliStr(dateStr){
   if(!dateStr) return '';
   const [gy,gm,gd] = dateStr.split('-').map(Number);
@@ -601,6 +605,7 @@ function migrateLegacyProductCategories(){
 let records   = loadJSON(STORE_KEYS.records, []);
 let invoices  = loadJSON(STORE_KEYS.invoices, []);
 let invoiceSeq = loadJSON(STORE_KEYS.invoiceSeq, 2250);
+let backupLoadMode = 'merge'; // 'merge' | 'replace' — کدام دکمه بک‌آپ زده شده
 let customers = loadJSON(STORE_KEYS.customers, []); // [{id,name,phone}]
 let transactions = loadJSON(STORE_KEYS.transactions, []); // [{id,customerId,type:'invoice'|'credit', amount, date, note, invoiceId?}]
 let overheadPerUnit = loadJSON(STORE_KEYS.overheadPerUnit, 0); // سربار ثابت قدیمی به ازای هر واحد محصول — فقط برای حالت دستی نگه داشته شده
@@ -1128,9 +1133,13 @@ function saveInvoiceDraft(targetStatus){
     const merged = {...invDraft, status: targetStatus || invDraft.status};
     merged.status = resolveInvoiceStatus(merged, merged.status);
     invoices[idx] = merged;
+    if(merged.number!=null && !isNaN(merged.number) && merged.number>=invoiceSeq){
+      invoiceSeq = merged.number + 1;
+      saveJSON(STORE_KEYS.invoiceSeq, invoiceSeq);
+    }
   } else {
-    const num = invoiceSeq;
-    invoiceSeq = invoiceSeq + 1;
+    const num = (invDraft.number!=null && !isNaN(invDraft.number)) ? invDraft.number : invoiceSeq;
+    invoiceSeq = Math.max(invoiceSeq, num + 1);
     saveJSON(STORE_KEYS.invoiceSeq, invoiceSeq);
     const inv = {...invDraft, id: Date.now().toString(), number: num, status: targetStatus || 'draft'};
     inv.status = resolveInvoiceStatus(inv, inv.status);
@@ -1164,17 +1173,20 @@ function renderInvoiceListTab(){
     return `<p class="empty">هنوز فاکتوری ثبت نشده</p>
     <button id="newInvBtn" class="btn btn-red" style="width:100%">+ فاکتور جدید</button>`;
   }
-  const q = invSearchQuery.trim().toLowerCase();
+  const q = toLatinDigits(invSearchQuery.trim().toLowerCase());
   const filtered = !q ? invoices : invoices.filter(inv=>{
     const name = (inv.customerName||'').toLowerCase();
-    const phone = (inv.customerPhone||'');
-    const code = (inv.projectCode||'').toLowerCase();
-    const numStr = invNumStr(inv.number)||'';
+    const phone = toLatinDigits(inv.customerPhone||'');
+    const code = toLatinDigits((inv.projectCode||'').toLowerCase());
+    const codeDisplay = toLatinDigits(projectCodeDisplay(inv.projectCode).toLowerCase());
+    const numStr = toLatinDigits(invNumStr(inv.number)||'');
+    const numRaw = String(inv.number!=null? inv.number : '');
     const dateG = (inv.date||'');
-    const dateJ = jalaliStr(inv.date)||'';
+    const dateJ = toLatinDigits(jalaliStr(inv.date)||'');
     const pStatus = (PROJECT_STATUS_LABELS[inv.projectStatus]||'').toLowerCase();
     const status = (STATUS_LABELS[inv.status]||'').toLowerCase();
-    return name.includes(q) || phone.includes(q) || code.includes(q) || numStr.includes(q) ||
+    return name.includes(q) || phone.includes(q) || code.includes(q) || codeDisplay.includes(q) ||
+           numStr.includes(q) || numRaw.includes(q) ||
            dateG.includes(q) || dateJ.includes(q) || pStatus.includes(q) || status.includes(q);
   });
   return `
@@ -1230,6 +1242,10 @@ function renderInvoiceEditTab(){
   const prevBalFinal = invoicePrevBalanceFinal(invDraft);
   return `
     <button id="invBackBtn" class="btn btn-outline" style="width:100%;margin-bottom:10px">← بازگشت به لیست فاکتورها</button>
+    <div class="row-flex" style="margin-bottom:6px">
+      <label class="small">شماره فاکتور:</label>
+      <input id="invNumberInput" type="text" inputmode="numeric" value="${escapeAttr(invDraft.number!=null? invDraft.number : invoiceSeq)}" style="flex:1;font-weight:700">
+    </div>
     <div class="row-flex" style="margin-bottom:6px">
       <label class="small">فعالیت:</label>
       <select id="invActivityType" style="flex:1">
@@ -1391,6 +1407,10 @@ function bindInvoiceEditEvents(){
   document.getElementById('invSaveDraftBtn')?.addEventListener('click', ()=>saveInvoiceDraft('draft'));
   document.getElementById('invSaveFinalBtn')?.addEventListener('click', ()=>saveInvoiceDraft('final'));
   document.getElementById('invBackBtn')?.addEventListener('click', ()=>{ invTab='list'; editingInvId=null; render(); });
+  document.getElementById('invNumberInput')?.addEventListener('input', e=>{
+    const n = parseInt(e.target.value, 10);
+    invDraft.number = isNaN(n) ? null : n;
+  });
   document.getElementById('invCancelEditBtn')?.addEventListener('click', ()=>{ invTab='list'; editingInvId=null; render(); });
   document.querySelectorAll('.invline-product').forEach(el=>{
     el.addEventListener('change', e=>{
@@ -2841,10 +2861,11 @@ function render(){
     </div>
     <div class="row-flex backup-row" style="margin-top:20px;border-top:1px solid #eee;padding-top:16px">
       <button id="downloadBackupBtn" class="btn btn-outline" style="flex:1">دانلود بک‌آپ</button>
-      <button id="loadBackupBtn" class="btn btn-outline" style="flex:1">بارگذاری بک‌آپ</button>
+      <button id="mergeBackupBtn" class="btn btn-outline" style="flex:1">ادغام بک‌آپ</button>
+      <button id="replaceBackupBtn" class="btn btn-outline" style="flex:0 0 auto;color:var(--red);font-size:12px">جایگزینی کامل</button>
       <input type="file" id="backupFileInput" accept=".json" style="display:none">
     </div>
-    <p class="note">داده‌ها فقط روی همین مرورگر و همین فایل ذخیره می‌شوند — برای انتقال بین دستگاه‌ها از بک‌آپ استفاده کن</p>
+    <p class="note">داده‌ها فقط روی همین مرورگر و همین فایل ذخیره می‌شوند — برای انتقال بین دستگاه‌ها از بک‌آپ استفاده کن. «ادغام» اطلاعات هر دو دستگاه را نگه می‌دارد (توصیه‌شده)؛ «جایگزینی کامل» همه‌چیز روی این دستگاه را با بک‌آپ عوض می‌کند.</p>
   `;
   document.getElementById('navOpenBtn')?.addEventListener('click', ()=>{ navMenuOpen = true; render(); });
   document.getElementById('navCloseBtn')?.addEventListener('click', ()=>{ navMenuOpen = false; render(); });
@@ -2877,7 +2898,7 @@ function render(){
 }
 
 function downloadBackup(){
-  const data = { materials, products, records, invoices, invoiceSeq, customers, transactions, overheadPerUnit, overheadPercent, suppliers, purchases, manualReminders, expenses, expenseCategories, exportedAt: new Date().toISOString() };
+  const data = { materials, products, productCategoriesList, records, invoices, invoiceSeq, customers, transactions, overheadPerUnit, overheadPercent, suppliers, purchases, manualReminders, expenses, expenseCategories, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const now = new Date();
@@ -2892,9 +2913,21 @@ function downloadBackup(){
   alert('بک‌آپ با نام lumera-backup-' + stamp + '.json دانلود شد');
 }
 
+function mergeArrayById(local, incoming){
+  const map = new Map();
+  (local||[]).forEach(item=>{ if(item && item.id!=null) map.set(item.id, item); });
+  (incoming||[]).forEach(item=>{ if(item && item.id!=null) map.set(item.id, item); }); // رکورد بک‌آپ در صورت تداخل شناسه، برنده می‌شود
+  return Array.from(map.values());
+}
+
 function bindBackupEvents(){
   document.getElementById('downloadBackupBtn')?.addEventListener('click', downloadBackup);
-  document.getElementById('loadBackupBtn')?.addEventListener('click', ()=>{
+  document.getElementById('mergeBackupBtn')?.addEventListener('click', ()=>{
+    backupLoadMode = 'merge';
+    document.getElementById('backupFileInput').click();
+  });
+  document.getElementById('replaceBackupBtn')?.addEventListener('click', ()=>{
+    backupLoadMode = 'replace';
     document.getElementById('backupFileInput').click();
   });
   document.getElementById('backupFileInput')?.addEventListener('change', e=>{
@@ -2913,23 +2946,47 @@ function bindBackupEvents(){
         }
         const itemCount = (data.invoices||[]).length + (data.customers||[]).length + (data.records||[]).length;
         const exportedAt = data.exportedAt ? jalaliStr(data.exportedAt.slice(0,10)) : 'نامشخص';
-        if(!confirm('این بک‌آپ شامل ' + itemCount + ' رکورد است (تاریخ تهیه: ' + exportedAt + '). این کار اطلاعات فعلی همین دستگاه را با بک‌آپ جایگزین می‌کند. ادامه می‌دهید؟')) { e.target.value=''; return; }
-        materials = data.materials || [];
-        products = data.products || [];
-        records = data.records || [];
-        invoices = data.invoices || [];
-        invoiceSeq = data.invoiceSeq || 2250;
-        customers = data.customers || [];
-        transactions = data.transactions || [];
-        overheadPerUnit = data.overheadPerUnit || 0;
-        overheadPercent = data.overheadPercent!=null ? data.overheadPercent : null;
-        suppliers = data.suppliers || [];
-        purchases = data.purchases || [];
-        manualReminders = data.manualReminders || [];
-        expenses = data.expenses || [];
-        expenseCategories = data.expenseCategories || [];
+
+        if(backupLoadMode==='replace'){
+          if(!confirm('این بک‌آپ شامل ' + itemCount + ' رکورد است (تاریخ تهیه: ' + exportedAt + '). این کار تمام اطلاعات فعلی همین دستگاه را پاک و با بک‌آپ جایگزین می‌کند — قابل بازگشت نیست. ادامه می‌دهید؟')) { e.target.value=''; return; }
+          materials = data.materials || [];
+          products = data.products || [];
+          productCategoriesList = data.productCategoriesList || [];
+          records = data.records || [];
+          invoices = data.invoices || [];
+          invoiceSeq = data.invoiceSeq || 2250;
+          customers = data.customers || [];
+          transactions = data.transactions || [];
+          overheadPerUnit = data.overheadPerUnit || 0;
+          overheadPercent = data.overheadPercent!=null ? data.overheadPercent : null;
+          suppliers = data.suppliers || [];
+          purchases = data.purchases || [];
+          manualReminders = data.manualReminders || [];
+          expenses = data.expenses || [];
+          expenseCategories = data.expenseCategories || [];
+        } else {
+          if(!confirm('این بک‌آپ شامل ' + itemCount + ' رکورد است (تاریخ تهیه: ' + exportedAt + '). اطلاعات این بک‌آپ با اطلاعات فعلی همین دستگاه «ادغام» می‌شود — چیزی از این دستگاه حذف نمی‌شود. ادامه می‌دهید؟')) { e.target.value=''; return; }
+          materials = mergeArrayById(materials, data.materials);
+          products = mergeArrayById(products, data.products);
+          productCategoriesList = mergeArrayById(productCategoriesList, data.productCategoriesList);
+          records = mergeArrayById(records, data.records);
+          invoices = mergeArrayById(invoices, data.invoices);
+          invoiceSeq = Math.max(invoiceSeq, data.invoiceSeq || 0);
+          customers = mergeArrayById(customers, data.customers);
+          transactions = mergeArrayById(transactions, data.transactions);
+          suppliers = mergeArrayById(suppliers, data.suppliers);
+          purchases = mergeArrayById(purchases, data.purchases);
+          manualReminders = mergeArrayById(manualReminders, data.manualReminders);
+          expenses = mergeArrayById(expenses, data.expenses);
+          expenseCategories = mergeArrayById(expenseCategories, data.expenseCategories);
+          // تنظیمات سراسری (سربار) دست نمی‌خورند مگر این دستگاه هنوز مقداری نداشته باشد
+          if(!overheadPerUnit) overheadPerUnit = data.overheadPerUnit || overheadPerUnit;
+          if(overheadPercent==null) overheadPercent = data.overheadPercent!=null ? data.overheadPercent : overheadPercent;
+        }
+
         saveJSON(STORE_KEYS.materials, materials);
         saveJSON(STORE_KEYS.products, products);
+        saveJSON(STORE_KEYS.productCategories, productCategoriesList);
         saveJSON(STORE_KEYS.records, records);
         saveJSON(STORE_KEYS.invoices, invoices);
         saveJSON(STORE_KEYS.invoiceSeq, invoiceSeq);
@@ -2942,7 +2999,7 @@ function bindBackupEvents(){
         saveJSON(STORE_KEYS.reminders, manualReminders);
         saveJSON(STORE_KEYS.expenses, expenses);
         saveJSON(STORE_KEYS.expenseCategories, expenseCategories);
-        alert('بک‌آپ با موفقیت بارگذاری شد');
+        alert(backupLoadMode==='replace' ? 'بک‌آپ با موفقیت جایگزین شد' : 'بک‌آپ با موفقیت ادغام شد');
         render();
       }catch(err){
         alert('فایل بک‌آپ معتبر نیست');

@@ -1,5 +1,10 @@
-// سرویس‌ورکر ساده برای قابلیت نصب و کارکرد آفلاین LUMERASTEEL
-const CACHE_NAME = 'lumerasteel-v1';
+// سرویس‌ورکر LUMERASTEEL — نسخه ۲
+// نکته مهم: استراتژی اینجا «اول شبکه» است، نه «اول کش».
+// یعنی وقتی گوشی به اینترنت وصله، همیشه آخرین نسخه صفحه از سرور گرفته می‌شود
+// و فقط برای حالت آفلاین (بی‌اینترنتی) از نسخه ذخیره‌شده استفاده می‌شود.
+// نسخه قبلی (اول کش) باعث می‌شد بعد از هر به‌روزرسانی، برنامه نصب‌شده رو گوشی
+// همچنان نسخه قدیمی و گاهی خراب را نشان بدهد.
+const CACHE_NAME = 'lumerasteel-v2';
 const APP_SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
@@ -18,21 +23,17 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// استراتژی: اول کش، بعد شبکه — برای اینکه بعد از نصب، بدون اینترنت هم باز شود
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const fetchPromise = fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResponse;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
