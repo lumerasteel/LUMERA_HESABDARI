@@ -622,6 +622,8 @@ let navExpanded = new Set(); // کدام گروه‌های منوی درختی �
 let editingMatId = null;
 let newMat = { name:'', unit:UNITS[0], price:'' };
 let newCategoryName = ''; // نام دسته جدید در حال تایپ در تب محصولات
+let newProductName = ''; // نام محصول جدید در حال تایپ
+let newProductCategoryId = ''; // دسته انتخاب‌شده برای محصول جدید در حال افزودن
 let expandedCategoryIds = new Set(); // کدام کشوهای دسته‌بندی در تب محصولات باز هستند
 let editingCatalogId = null; // شناسه محصولی که فرم ویرایش اطلاعات کاتالوگش (تصویر/دسته/ابعاد) باز است
 let catalogDraft = { categoryId:'', dimensions:'', image:'' }; // مقادیر موقت فرم ویرایش اطلاعات کاتالوگ
@@ -1724,11 +1726,11 @@ function renderProductCard(p){
 /* ---------- PRODUCTS TAB ---------- */
 function renderProductsTab(){
   const grouped = {};
+  productCategoriesList.forEach(c=>{ grouped[c.id] = []; }); // همه دسته‌ها همیشه دیده می‌شوند، حتی وقتی هنوز محصولی ندارند
   products.forEach(p=>{
     const key = p.categoryId && categoryName(p.categoryId) ? p.categoryId : '__none__';
     (grouped[key] = grouped[key]||[]).push(p);
   });
-  if(productCategoriesList.length===0 && !grouped['__none__']) grouped['__none__'] = [];
   const keys = Object.keys(grouped).sort((a,b)=>{
     if(a==='__none__') return 1;
     if(b==='__none__') return -1;
@@ -1736,11 +1738,18 @@ function renderProductsTab(){
   });
   return `
     <p class="note" style="margin-bottom:10px">اینجا فرمول محصول (مواد و دستمزد) ذخیره می‌شود تا دفعه بعد لازم نباشه از اول بسازیش. برای ثبت قیمت واقعی هر ماه، از دکمه «ثبت محصول» در تب «محاسبه» استفاده کن — همون‌جاست که وارد «تاریخچه» می‌شود</p>
+    <h2 class="sec">دسته‌بندی‌ها</h2>
     <div class="box-gray" style="display:flex;gap:8px;margin-bottom:14px">
       <input id="newCategoryNameInput" placeholder="نام دسته جدید (مثلا سینی، استند شلنگ...)" value="${escapeAttr(newCategoryName)}" style="flex:1">
       <button id="addCategoryBtn" class="btn btn-black">+ دسته جدید</button>
     </div>
-    ${keys.length===0? `<p class="empty">هنوز دسته‌بندی‌ای تعریف نشده — اول یه دسته بساز</p>` : keys.map(key=>{
+    <h2 class="sec">افزودن محصول جدید</h2>
+    <div class="box-gray" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <input id="newProductNameInput" placeholder="نام محصول جدید (مثلا جاشلنگی Classic)" value="${escapeAttr(newProductName)}">
+      <select id="newProductCategorySelect">${categorySelectOptions(newProductCategoryId)}</select>
+      <button id="addProductBtn" class="btn btn-black">+ افزودن محصول</button>
+    </div>
+    ${keys.length===0? `<p class="empty">هنوز محصولی ساخته نشده</p>` : keys.map(key=>{
       const label = key==='__none__' ? 'بدون دسته‌بندی' : categoryName(key);
       const list = grouped[key]||[];
       const isOpen = expandedCategoryIds.has(key);
@@ -1756,10 +1765,6 @@ function renderProductsTab(){
         ${isOpen? `
         <div style="padding:0 14px 14px">
           <button class="cat-back btn btn-outline" data-key="${key}" style="width:100%;margin-bottom:10px">→ بازگشت به لیست دسته‌ها</button>
-          <div class="box-gray" style="display:flex;gap:8px;margin-bottom:10px">
-            <input id="newProductNameInput-${key}" placeholder="نام محصول جدید" style="flex:1">
-            <button class="addProductBtn btn btn-black" data-cat="${key}">+ افزودن</button>
-          </div>
           ${list.length===0? `<p class="empty">هنوز محصولی در این دسته نیست</p>` : list.map(p=>renderProductCard(p)).join('')}
         </div>` : ''}
       </div>
@@ -1785,9 +1790,11 @@ function bindProductsEvents(){
     e.stopPropagation();
     const name = document.getElementById('newCategoryNameInput').value.trim();
     if(!name || productCategoriesList.some(c=>c.name===name)) return;
-    productCategoriesList.push({id:'cat-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), name});
+    const cat = {id:'cat-'+Date.now()+'-'+Math.random().toString(36).slice(2,6), name};
+    productCategoriesList.push(cat);
     saveJSON(STORE_KEYS.productCategories, productCategoriesList);
     newCategoryName='';
+    expandedCategoryIds.add(cat.id); // دسته تازه‌ساز رو خودکار باز نشون بده که واضح باشه ساخته شده
     render();
   });
   document.querySelectorAll('.cat-delete').forEach(el=>{
@@ -1803,17 +1810,15 @@ function bindProductsEvents(){
       render();
     });
   });
-  document.querySelectorAll('.addProductBtn').forEach(el=>{
-    el.addEventListener('click', e=>{
-      e.stopPropagation();
-      const key = e.currentTarget.dataset.cat;
-      const input = document.getElementById('newProductNameInput-'+key);
-      const name = input.value.trim();
-      if(!name || products.some(p=>p.name===name)) return;
-      products.push({id:Date.now().toString(), name, categoryId: key==='__none__'?'':key, dimensions:'', image:'', items:[], laborItems:[]});
-      saveJSON(STORE_KEYS.products, products);
-      render();
-    });
+  document.getElementById('newProductCategorySelect')?.addEventListener('change', e=>{ newProductCategoryId = e.target.value; });
+  document.getElementById('addProductBtn')?.addEventListener('click', ()=>{
+    const name = document.getElementById('newProductNameInput').value.trim();
+    if(!name || products.some(p=>p.name===name)) return;
+    products.push({id:Date.now().toString(), name, categoryId: newProductCategoryId||'', dimensions:'', image:'', items:[], laborItems:[]});
+    saveJSON(STORE_KEYS.products, products);
+    newProductName = '';
+    if(newProductCategoryId) expandedCategoryIds.add(newProductCategoryId); else expandedCategoryIds.add('__none__');
+    render();
   });
   document.querySelectorAll('.prod-load').forEach(el=>{
     el.addEventListener('click', e=>{
@@ -1995,13 +2000,9 @@ function renderCustomersTab(){
   return `
     <button id="custNewBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ مشتری جدید</button>
     ${customers.map(c=>{
-      const bal = customerBalance(c.id);
       return `<div class="card cust-row" data-id="${c.id}" style="cursor:pointer">
         <div class="card-title"><span>${escapeAttr(c.name)}</span></div>
         ${c.phone? `<div class="card-sub">${escapeAttr(c.phone)}</div>`:''}
-        <div style="margin-top:6px;font-weight:700;color:${bal.net<0?'var(--red)':'#1A7A3A'}">
-          ${bal.net<0? 'بدهکار: '+fmt(Math.abs(bal.net))+' ت' : (bal.net>0? 'بستانکار: '+fmt(bal.net)+' ت' : 'تسویه')}
-        </div>
       </div>`;
     }).join('')}
   `;
