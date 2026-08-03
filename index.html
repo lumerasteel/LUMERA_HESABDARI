@@ -67,10 +67,10 @@
 
   *{box-sizing:border-box;}
   button:focus-visible,.tab-btn:focus-visible,.pill:focus-visible,a:focus-visible{outline:2px solid var(--c-accent);outline-offset:2px;}
-  body{font-family:var(--font-fa);background:var(--c-bg);color:var(--c-ink);margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{font-family:var(--font-fa);background:radial-gradient(ellipse 900px 500px at 15% -5%, rgba(255,255,255,0.9), transparent 60%), radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255,255,255,0.5), transparent 55%), var(--c-bg);background-attachment:fixed;color:var(--c-ink);margin:0;padding:0;-webkit-font-smoothing:antialiased;}
   .wrap{max-width:480px;margin:0 auto;padding:var(--sp-4);}
-  @keyframes lumeraFadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
-  #tabContent{animation:lumeraFadeIn var(--t-med) var(--ease);}
+  @keyframes lumeraFadeIn{from{opacity:0;transform:translateY(8px) scale(0.99);}to{opacity:1;transform:translateY(0) scale(1);}}
+  #tabContent{animation:lumeraFadeIn 320ms var(--ease);}
   @media (prefers-reduced-motion:reduce){ #tabContent{animation:none;} }
   h1{font-size:var(--fs-h1);font-weight:var(--fw-bold);letter-spacing:-0.01em;margin:0 0 2px;color:var(--c-ink);}
   .sub{color:var(--c-steel);font-size:var(--fs-sub);margin:0 0 var(--sp-4);}
@@ -112,22 +112,22 @@
   .btn-black{background:var(--c-ink);color:var(--c-white);box-shadow:var(--sh-flat);}
   .btn-black:hover{opacity:0.92;}
   .btn-outline{background:rgba(255,255,255,0.55);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--c-ink);border:1px solid var(--c-line);}
-  .btn-outline:hover{border-color:var(--c-steel-light);}
+  .btn-outline:hover{border-color:var(--c-accent);color:var(--c-accent);}
   .btn-red{background:var(--c-accent);color:var(--c-white);box-shadow:0 4px 12px rgba(230,30,50,0.22);}
   .btn-red:hover{opacity:0.94;}
   .btn-icon{background:none;border:none;color:var(--c-accent);cursor:pointer;padding:4px 8px;font-size:15px;transition:transform var(--t-fast) var(--ease),opacity var(--t-fast) var(--ease);}
   .btn-icon:active{transform:scale(0.9);}
   @media (hover:hover){
-    .btn-black:hover,.btn-red:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(20,22,24,0.15);}
-    .btn-outline:hover{transform:translateY(-1px);}
+    .btn-black:hover,.btn-red:hover{transform:translateY(-1px) scale(1.015);box-shadow:0 6px 16px rgba(20,22,24,0.15);}
+    .btn-outline:hover{transform:translateY(-1px) scale(1.015);box-shadow:0 4px 14px rgba(230,30,50,0.16);}
   }
 
   /* ---- Cards ---- */
-  .card{background:rgba(255,255,255,0.62);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);border:1px solid var(--c-line-soft);border-radius:var(--r-md);padding:var(--sp-3);margin-bottom:var(--sp-2);box-shadow:var(--sh-flat);transition:box-shadow var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease);}
+  .card{background:rgba(255,255,255,0.58);backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);border:1px solid rgba(255,255,255,0.7);outline:1px solid var(--c-line-soft);outline-offset:-1px;border-radius:18px;padding:var(--sp-3);margin-bottom:var(--sp-2);box-shadow:var(--sh-flat);transition:box-shadow var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease);}
   .card-active{border-color:var(--c-accent);}
   .card-title{font-weight:var(--fw-bold);font-size:var(--fs-body);color:var(--c-ink);}
   .card-sub{font-size:var(--fs-label);color:var(--c-steel);}
-  .box-gray{background:rgba(241,242,244,0.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:var(--r-md);padding:var(--sp-3);margin-bottom:var(--sp-4);box-shadow:var(--sh-inset);}
+  .box-gray{background:rgba(241,242,244,0.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:16px;padding:var(--sp-3);margin-bottom:var(--sp-4);box-shadow:var(--sh-inset);}
   @media (hover:hover){
     .card:hover{box-shadow:var(--sh-raised-sm);transform:translateY(-1px);}
   }
@@ -246,6 +246,7 @@
   /* ---- Results panel ---- */
   .results{background:linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 40%), var(--c-ink);color:var(--c-white);border-radius:var(--r-md);padding:var(--sp-4);margin-bottom:var(--sp-3);box-shadow:var(--sh-elevated);}
   .r-row{display:flex;justify-content:space-between;font-size:var(--fs-body);padding:4px 0;}
+  .r-row span:last-child{font-family:'Inter',var(--font-fa);font-variant-numeric:tabular-nums;letter-spacing:0.01em;}
   .r-row.bold{font-weight:var(--fw-bold);}
   .r-row.accent{color:var(--c-accent);}
   hr.sep{border:none;border-top:1px solid rgba(255,255,255,0.14);margin:var(--sp-2) 0;}
@@ -345,7 +346,7 @@
 <div class="wrap" id="app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-const STORE_KEYS = { materials:'lumera_materials', products:'lumera_products', productCategories:'lumera_productCategories', records:'lumera_records', invoices:'lumera_invoices', invoiceSeq:'lumera_invoiceSeq', customers:'lumera_customers', transactions:'lumera_transactions', overheadPerUnit:'lumera_overheadPerUnit', overheadPercent:'lumera_overheadPercent', suppliers:'lumera_suppliers', purchases:'lumera_purchases', reminders:'lumera_reminders', expenses:'lumera_expenses', expenseCategories:'lumera_expenseCategories' };
+const STORE_KEYS = { materials:'lumera_materials', products:'lumera_products', productCategories:'lumera_productCategories', records:'lumera_records', invoices:'lumera_invoices', invoiceSeq:'lumera_invoiceSeq', customers:'lumera_customers', transactions:'lumera_transactions', overheadPerUnit:'lumera_overheadPerUnit', overheadPercent:'lumera_overheadPercent', suppliers:'lumera_suppliers', purchases:'lumera_purchases', reminders:'lumera_reminders', expenses:'lumera_expenses', expenseCategories:'lumera_expenseCategories', bankInfo:'lumera_bankInfo' };
 const UNITS = ['کیلوگرم','متر','متر مربع','ورق','عدد'];
 const LABOR_PRESETS = ['برش لیزر','خم‌کاری','رنگ','جوش‌کاری'];
 function navIcon(paths){ return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${paths}</svg>`; }
@@ -1018,7 +1019,38 @@ function saveCurrentAsProduct(nameOverride, showAlert){
 }
 
 /* ---------- INVOICE HELPERS ---------- */
-const ACTIVITY_LABELS = { lumera:'ساخت LUMERA', drafting:'نقشه‌کشی' };
+// اطلاعات واریز که در فاکتور چاپی نشون داده میشه — با اطلاعات واقعی جایگزین کن
+let bankInfo = loadJSON(STORE_KEYS.bankInfo, { bankName:'', accountHolder:'', cardNumber:'', iban:'' });
+let bankInfoEditorOpen = false;
+const ACTIVITY_LABELS = { lumera:'ساخت LUMERA', drafting:'نقشه‌کشی', graphic:'طراحی لوگو و گرافیک' };
+// ضوابط مخصوص هر نوع فعالیت — این‌ها جدا از هم هستن، نقشه‌کشی و گرافیک ضوابط ساخت رو به ارث نمی‌برن
+const ACTIVITY_TERMS = {
+  lumera: [
+    'قیمت‌ها بر اساس نرخ روز مواد اولیه — در صورت تغییر قیمت بازار، مبلغ نهایی قابل بازنگری است.',
+    'زمان تحویل ۱۰ روز کاری پس از دریافت بیعانه.',
+    'هرگونه تغییرات پس از تأیید طرح شامل هزینه مجدد می‌باشد.',
+    'تحویل درب کارگاه — ارسال با باربری هزینه به عهده مشتری.',
+    'ضمانت ۶ ماهه جوش.',
+    'ضمانت پس از فروش شامل اصلاح جزئی در صورت ایراد ساخت.',
+  ],
+  drafting: [
+    'نقشه بر اساس اطلاعات و ابعاد ارائه‌شده توسط مشتری تهیه می‌شود.',
+    'زمان تحویل نقشه ۳ روز کاری پس از دریافت بیعانه.',
+    'هرگونه اصلاح خارج از طرح اولیه، شامل هزینه مجدد می‌باشد.',
+    'مسئولیت صحت اجرای نقشه در کارگاه دیگر، بر عهده مجری آن کارگاه است.',
+  ],
+  graphic: [
+    'طراحی بر اساس بریف و سلیقه اعلام‌شده توسط مشتری انجام می‌شود.',
+    'شامل حداکثر ۲ مرحله بازبینی (ریویو) رایگان؛ بازبینی‌های بیشتر هزینه جداگانه دارد.',
+    'زمان تحویل طرح اولیه ۵ روز کاری پس از دریافت بیعانه.',
+    'فایل‌های لایه‌باز (قابل ویرایش) فقط پس از تسویه کامل ارسال می‌شوند.',
+  ],
+};
+// قوانین مالی — این‌ها ثابت‌اند و برای هر نوع فعالیتی یکسان اعمال می‌شوند
+const FINANCIAL_TERMS_COMMON = [
+  'شروع هرگونه کار منوط به دریافت پیش‌پرداخت (بیعانه) است.',
+  'فایل یا محصول نهایی تنها پس از تسویه کامل هزینه تحویل داده می‌شود.',
+];
 const STATUS_LABELS = { draft:'پیش‌فاکتور', final:'صادرشده', paid:'تسویه‌شده', cancelled:'لغوشده' };
 const INVOICE_TITLES = { draft:'پیش‌فاکتور فروش', final:'فاکتور فروش', paid:'فاکتور فروش (تسویه‌شده)', cancelled:'فاکتور فروش (لغوشده)' };
 const PROJECT_STATUS_LABELS = { inquiry:'استعلام', design:'طراحی', approved:'تایید مشتری', making:'درحال ساخت', ready:'آماده تحویل', delivered:'تحویل/ارسال' };
@@ -1170,9 +1202,48 @@ function cycleInvoiceStatusInList(id){
 /* ---------- INVOICE TAB RENDER ---------- */
 let invSearchQuery = '';
 let invSearchDebounceTimer = null;
+function renderBankInfoSettings(){
+  const isOpen = bankInfoEditorOpen;
+  return `
+    <div class="card" style="margin-bottom:10px;padding:0;overflow:hidden">
+      <div class="cat-toggle" id="bankInfoToggle" style="display:flex;justify-content:space-between;align-items:center;padding:14px;cursor:pointer">
+        <span style="display:flex;align-items:center;gap:8px;font-weight:700">
+          <span style="display:inline-block;transition:transform .15s ease;transform:rotate(${isOpen?90:0}deg)">▸</span>
+          اطلاعات واریز (بانک/کارت/شبا)
+        </span>
+      </div>
+      ${isOpen? `
+      <div style="padding:0 14px 14px">
+        <p class="note" style="margin-bottom:8px">این اطلاعات پایین هر فاکتور چاپی نشون داده می‌شه. هر وقت شماره کارت یا بانکت عوض شد، همین‌جا اصلاحش کن</p>
+        <input id="bankNameInput" placeholder="نام بانک" value="${escapeAttr(bankInfo.bankName)}" style="margin-bottom:8px">
+        <input id="bankHolderInput" placeholder="به نام (صاحب حساب)" value="${escapeAttr(bankInfo.accountHolder)}" style="margin-bottom:8px">
+        <input id="bankCardInput" placeholder="شماره کارت" value="${escapeAttr(bankInfo.cardNumber)}" style="margin-bottom:8px">
+        <input id="bankIbanInput" placeholder="شماره شبا" value="${escapeAttr(bankInfo.iban)}" style="margin-bottom:10px">
+        <button id="bankInfoSaveBtn" class="btn btn-black" style="width:100%">ذخیره اطلاعات واریز</button>
+      </div>` : ''}
+    </div>
+  `;
+}
+function bindBankInfoEvents(){
+  document.getElementById('bankInfoToggle')?.addEventListener('click', ()=>{
+    bankInfoEditorOpen = !bankInfoEditorOpen;
+    render();
+  });
+  document.getElementById('bankInfoSaveBtn')?.addEventListener('click', ()=>{
+    bankInfo = {
+      bankName: document.getElementById('bankNameInput').value.trim(),
+      accountHolder: document.getElementById('bankHolderInput').value.trim(),
+      cardNumber: document.getElementById('bankCardInput').value.trim(),
+      iban: document.getElementById('bankIbanInput').value.trim(),
+    };
+    saveJSON(STORE_KEYS.bankInfo, bankInfo);
+    bankInfoEditorOpen = false;
+    render();
+  });
+}
 function renderInvoiceListTab(){
   if(invoices.length===0){
-    return `<p class="empty">هنوز فاکتوری ثبت نشده</p>
+    return renderBankInfoSettings() + `<p class="empty">هنوز فاکتوری ثبت نشده</p>
     <button id="newInvBtn" class="btn btn-red" style="width:100%">+ فاکتور جدید</button>`;
   }
   const q = toLatinDigits(invSearchQuery.trim().toLowerCase());
@@ -1192,6 +1263,7 @@ function renderInvoiceListTab(){
            dateG.includes(q) || dateJ.includes(q) || pStatus.includes(q) || status.includes(q);
   });
   return `
+    ${renderBankInfoSettings()}
     <button id="newInvBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ فاکتور جدید</button>
     <input id="invSearchInput" placeholder="🔍 جستجو: شماره فاکتور، نام/تلفن مشتری، کد پروژه، تاریخ یا وضعیت" value="${escapeAttr(invSearchQuery)}" style="width:100%;margin-bottom:10px;border:1.5px solid #000">
     ${filtered.length===0? '<p class="empty">نتیجه‌ای پیدا نشد</p>' : filtered.map(inv=>{
@@ -1253,6 +1325,7 @@ function renderInvoiceEditTab(){
       <select id="invActivityType" style="flex:1">
         <option value="lumera" ${invDraft.activityType==='lumera'?'selected':''}>ساخت LUMERA</option>
         <option value="drafting" ${invDraft.activityType==='drafting'?'selected':''}>نقشه‌کشی</option>
+        <option value="graphic" ${invDraft.activityType==='graphic'?'selected':''}>طراحی لوگو و گرافیک</option>
       </select>
     </div>
     <div class="box-gray">
@@ -1342,6 +1415,7 @@ function renderInvoiceTab(){
   return invTab==='edit' ? renderInvoiceEditTab() : renderInvoiceListTab();
 }
 function bindInvoiceListEvents(){
+  bindBankInfoEvents();
   document.getElementById('newInvBtn')?.addEventListener('click', ()=>{ newInvoiceFromDraft(); render(); });
   const searchEl = document.getElementById('invSearchInput');
   if(searchEl){
@@ -1526,15 +1600,19 @@ function buildA4InvoiceHTML(inv){
         <div class="a4-terms-box">
           <div class="a4-terms-title">شرایط و ضوابط</div>
           <ul class="a4-terms-list">
-            <li class="important">قیمت‌ها بر اساس نرخ روز مواد اولیه — در صورت تغییر قیمت بازار، مبلغ نهایی قابل بازنگری است.</li>
-            <li>شروع ساخت منوط به تأیید نهایی قیمت و دریافت بیعانه.</li>
-            <li>زمان تحویل ۱۰ روز کاری پس از دریافت بیعانه.</li>
-            <li>هرگونه تغییرات پس از تأیید طرح شامل هزینه مجدد می‌باشد.</li>
-            <li>تحویل درب کارگاه — ارسال با باربری هزینه به عهده مشتری.</li>
-            <li>ضمانت ۶ ماهه جوش.</li>
-            <li>ضمانت پس از فروش شامل اصلاح جزئی در صورت ایراد ساخت.</li>
+            ${(ACTIVITY_TERMS[inv.activityType]||ACTIVITY_TERMS.lumera).map(t=>`<li>${t}</li>`).join('')}
+            ${FINANCIAL_TERMS_COMMON.map(t=>`<li class="important">${t}</li>`).join('')}
             ${inv.notes ? `<li class="important">${escapeAttr(inv.notes)}</li>` : ''}
           </ul>
+          <div class="a4-bank-box">
+            <div class="a4-terms-title" style="margin-top:10px">اطلاعات واریز</div>
+            <div style="font-size:9.5px;color:#000;line-height:1.8">
+              بانک: ${escapeAttr(bankInfo.bankName) || '—'}<br>
+              به نام: ${escapeAttr(bankInfo.accountHolder) || '—'}<br>
+              شماره کارت: ${escapeAttr(bankInfo.cardNumber) || '—'}<br>
+              شماره شبا: ${escapeAttr(bankInfo.iban) || '—'}
+            </div>
+          </div>
         </div>
         <div class="a4-summary-box">
           <div class="a4-summary-card">
@@ -2406,7 +2484,7 @@ function renderExpensesTab(){
 
   const summary = expenseMonthSummary();
   const dStats = dashboardStats();
-  const monthIncome = dStats.lumera + dStats.drafting;
+  const monthIncome = dStats.lumera + dStats.drafting + dStats.graphic;
   const netBalance = monthIncome - summary.total;
   const sortedExpenses = [...expenses].sort((a,b)=> b.date.localeCompare(a.date));
   const filtered = expFilterTag==='all'? sortedExpenses : sortedExpenses.filter(e=>e.tag===expFilterTag);
@@ -2556,13 +2634,14 @@ function periodRange(period, refDateStr){
 function reportData(period){
   const {start, end} = periodRange(period);
   const counted = invoices.filter(inv=> (inv.status==='final' || inv.status==='paid') && inv.date>=start && inv.date<=end);
-  let lumera = 0, drafting = 0;
+  let lumera = 0, drafting = 0, graphic = 0;
   counted.forEach(inv=>{
     const t = computeInvoiceTotals(inv);
     if(inv.activityType==='drafting') drafting += t.grandTotal;
+    else if(inv.activityType==='graphic') graphic += t.grandTotal;
     else lumera += t.grandTotal;
   });
-  return { lumera, drafting, total: lumera+drafting, count: counted.length, start, end };
+  return { lumera, drafting, graphic, total: lumera+drafting+graphic, count: counted.length, start, end };
 }
 
 const REPORT_PERIOD_LABELS = { week:'هفتگی', month:'ماهانه', q3:'سه‌ماهه', q6:'شش‌ماهه', year:'سالانه' };
@@ -2641,12 +2720,14 @@ function dashboardStats(){
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
   const todayS = todayStr();
-  let lumera=0, drafting=0;
+  let lumera=0, drafting=0, graphic=0;
   invoices.filter(i=> (i.status==='final'||i.status==='paid') && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
     const t = computeInvoiceTotals(inv);
-    if(inv.activityType==='drafting') drafting += t.grandTotal; else lumera += t.grandTotal;
+    if(inv.activityType==='drafting') drafting += t.grandTotal;
+    else if(inv.activityType==='graphic') graphic += t.grandTotal;
+    else lumera += t.grandTotal;
   });
-  return { activeProjects, openDrafts, custDebt, custCredit, lumera, drafting };
+  return { activeProjects, openDrafts, custDebt, custCredit, lumera, drafting, graphic };
 }
 
 function renderDashboardTab(){
@@ -2676,8 +2757,9 @@ function renderDashboardTab(){
       <div class="grid2" style="margin-top:4px">
         <span>ساخت LUMERA: ${fmt(s.lumera)} ت</span>
         <span>نقشه‌کشی: ${fmt(s.drafting)} ت</span>
+        <span>گرافیک: ${fmt(s.graphic)} ت</span>
       </div>
-      <div class="r-row bold accent" style="margin-top:6px"><span>جمع</span><span>${fmt(s.lumera+s.drafting)} تومان</span></div>
+      <div class="r-row bold accent" style="margin-top:6px"><span>جمع</span><span>${fmt(s.lumera+s.drafting+s.graphic)} تومان</span></div>
     </div>
 
     <h2 class="sec">یادآورها و تقویم</h2>
@@ -2723,27 +2805,37 @@ function bindDashboardEvents(){
   });
 }
 
-function reportBarChart(lumera, drafting){
-  const max = Math.max(lumera, drafting, 1);
-  const w = 280, h = 140, barW = 70, gap = 60;
-  const lumeraH = Math.round((lumera/max)*100);
-  const draftingH = Math.round((drafting/max)*100);
-  const x1 = 40, x2 = x1+barW+gap;
+function reportBarChart(bars){
+  // bars: [{label, value, color}]
+  const max = Math.max(...bars.map(b=>b.value), 1);
+  const barW = 60, gap = 34, h = 140;
+  const w = bars.length*barW + (bars.length+1)*gap;
+  const startX = gap;
+  const barsSvg = bars.map((b,i)=>{
+    const x = startX + i*(barW+gap);
+    const bh = Math.round((b.value/max)*100);
+    return `
+    <rect x="${x}" y="${h-20-bh}" width="${barW}" height="${bh}" fill="${b.color}" rx="3"/>
+    <text x="${x+barW/2}" y="${h-20-bh-6}" text-anchor="middle" font-size="10" fill="#000" font-weight="700">${fmt(b.value)}</text>
+    <text x="${x+barW/2}" y="${h-4}" text-anchor="middle" font-size="10" fill="#7A7A7A">${b.label}</text>`;
+  }).join('');
   return `
-  <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:320px;display:block;margin:10px auto">
+  <svg viewBox="0 0 ${w} ${h}" style="width:100%;max-width:360px;display:block;margin:10px auto">
     <line x1="10" y1="${h-20}" x2="${w-10}" y2="${h-20}" stroke="#ddd" stroke-width="1"/>
-    <rect x="${x1}" y="${h-20-lumeraH}" width="${barW}" height="${lumeraH}" fill="#E61E32" rx="3"/>
-    <text x="${x1+barW/2}" y="${h-20-lumeraH-6}" text-anchor="middle" font-size="10" fill="#000" font-weight="700">${fmt(lumera)}</text>
-    <text x="${x1+barW/2}" y="${h-4}" text-anchor="middle" font-size="10" fill="#7A7A7A">LUMERA</text>
-    <rect x="${x2}" y="${h-20-draftingH}" width="${barW}" height="${draftingH}" fill="#000000" rx="3"/>
-    <text x="${x2+barW/2}" y="${h-20-draftingH-6}" text-anchor="middle" font-size="10" fill="#000" font-weight="700">${fmt(drafting)}</text>
-    <text x="${x2+barW/2}" y="${h-4}" text-anchor="middle" font-size="10" fill="#7A7A7A">نقشه‌کشی</text>
+    ${barsSvg}
   </svg>`;
 }
 
 function renderReportTab(){
   const d = reportData(reportPeriod);
-  const leader = d.lumera===d.drafting ? null : (d.lumera>d.drafting ? 'lumera' : 'drafting');
+  const cats = [
+    {key:'lumera', label:'ساخت LUMERA', value:d.lumera},
+    {key:'drafting', label:'نقشه‌کشی', value:d.drafting},
+    {key:'graphic', label:'گرافیک', value:d.graphic},
+  ];
+  const maxVal = Math.max(...cats.map(c=>c.value));
+  const topCats = cats.filter(c=>c.value===maxVal && maxVal>0);
+  const leader = topCats.length===1 ? topCats[0] : null;
   const custData = customerReportData();
   const best = custData.length>0 && custData[0].totalPurchase>0 ? custData[0] : null;
   return `
@@ -2759,13 +2851,18 @@ function renderReportTab(){
     <div class="card">
       <div class="card-title"><span>گزارش ${REPORT_PERIOD_LABELS[reportPeriod]}</span></div>
       <div class="card-sub">${jalaliStr(d.start)} تا ${jalaliStr(d.end)} — ${toPersianDigits(d.count)} فاکتور</div>
-      ${reportBarChart(d.lumera, d.drafting)}
+      ${reportBarChart([
+        {label:'LUMERA', value:d.lumera, color:'#E61E32'},
+        {label:'نقشه‌کشی', value:d.drafting, color:'#000000'},
+        {label:'گرافیک', value:d.graphic, color:'#7A7A7A'},
+      ])}
       <div class="grid2" style="margin-top:8px">
         <span>ساخت LUMERA: ${fmt(d.lumera)} ت</span>
         <span>نقشه‌کشی: ${fmt(d.drafting)} ت</span>
+        <span>گرافیک: ${fmt(d.graphic)} ت</span>
       </div>
       <div class="r-row bold accent" style="margin-top:8px"><span>جمع کل درآمد</span><span>${fmt(d.total)} تومان</span></div>
-      ${leader ? `<div style="margin-top:6px;font-size:12px;color:#7A7A7A">در این بازه، درآمد ${leader==='lumera'?'ساخت LUMERA':'نقشه‌کشی'} بیشتر بوده</div>` : ''}
+      ${leader ? `<div style="margin-top:6px;font-size:12px;color:#7A7A7A">در این بازه، درآمد ${escapeAttr(leader.label)} بیشتر بوده</div>` : ''}
     </div>
 
     <h2 class="sec" style="margin-top:20px">گزارش مشتریان (کل دوره)</h2>
@@ -2899,7 +2996,7 @@ function render(){
 }
 
 function downloadBackup(){
-  const data = { materials, products, productCategoriesList, records, invoices, invoiceSeq, customers, transactions, overheadPerUnit, overheadPercent, suppliers, purchases, manualReminders, expenses, expenseCategories, exportedAt: new Date().toISOString() };
+  const data = { materials, products, productCategoriesList, records, invoices, invoiceSeq, customers, transactions, overheadPerUnit, overheadPercent, suppliers, purchases, manualReminders, expenses, expenseCategories, bankInfo, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const now = new Date();
@@ -2965,6 +3062,7 @@ function bindBackupEvents(){
           manualReminders = data.manualReminders || [];
           expenses = data.expenses || [];
           expenseCategories = data.expenseCategories || [];
+          bankInfo = data.bankInfo || bankInfo;
         } else {
           if(!confirm('این بک‌آپ شامل ' + itemCount + ' رکورد است (تاریخ تهیه: ' + exportedAt + '). اطلاعات این بک‌آپ با اطلاعات فعلی همین دستگاه «ادغام» می‌شود — چیزی از این دستگاه حذف نمی‌شود. ادامه می‌دهید؟')) { e.target.value=''; return; }
           materials = mergeArrayById(materials, data.materials);
@@ -2980,9 +3078,10 @@ function bindBackupEvents(){
           manualReminders = mergeArrayById(manualReminders, data.manualReminders);
           expenses = mergeArrayById(expenses, data.expenses);
           expenseCategories = mergeArrayById(expenseCategories, data.expenseCategories);
-          // تنظیمات سراسری (سربار) دست نمی‌خورند مگر این دستگاه هنوز مقداری نداشته باشد
+          // تنظیمات سراسری (سربار، اطلاعات واریز) دست نمی‌خورند مگر این دستگاه هنوز مقداری نداشته باشد
           if(!overheadPerUnit) overheadPerUnit = data.overheadPerUnit || overheadPerUnit;
           if(overheadPercent==null) overheadPercent = data.overheadPercent!=null ? data.overheadPercent : overheadPercent;
+          if(data.bankInfo && !bankInfo.cardNumber && !bankInfo.iban) bankInfo = data.bankInfo;
         }
 
         saveJSON(STORE_KEYS.materials, materials);
@@ -3000,6 +3099,7 @@ function bindBackupEvents(){
         saveJSON(STORE_KEYS.reminders, manualReminders);
         saveJSON(STORE_KEYS.expenses, expenses);
         saveJSON(STORE_KEYS.expenseCategories, expenseCategories);
+        saveJSON(STORE_KEYS.bankInfo, bankInfo);
         alert(backupLoadMode==='replace' ? 'بک‌آپ با موفقیت جایگزین شد' : 'بک‌آپ با موفقیت ادغام شد');
         render();
       }catch(err){
