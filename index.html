@@ -488,6 +488,14 @@ function jalaliStr(dateStr){
   const p2 = n=>String(n).padStart(2,'0');
   return toPersianDigits(`${jy}/${p2(jm)}/${p2(jd)}`);
 }
+// اول ماه شمسی جاری را به تاریخ میلادی ISO برمی‌گرداند — چون «این ماه» برای کاربر یعنی ماه شمسی، نه میلادی
+function jalaliMonthStartISO(){
+  const now = new Date();
+  const [jy, jm] = toJalali(now.getFullYear(), now.getMonth()+1, now.getDate());
+  const [gy, gm, gd] = toGregorian(jy, jm, 1);
+  const p2 = n=>String(n).padStart(2,'0');
+  return `${gy}-${p2(gm)}-${p2(gd)}`;
+}
 function invNumStr(n){
   return toPersianDigits(String(n).padStart(3,'0'));
 }
@@ -2264,8 +2272,7 @@ function getCombinedBalances(){
 }
 
 function expenseMonthSummary(){
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  const monthStart = jalaliMonthStartISO();
   const todayS = todayStr();
   const inMonth = expenses.filter(e=> e.date>=monthStart && e.date<=todayS);
   // مقادیر منفی احتمالی (مثلا از بک‌آپ دستکاری‌شده) نادیده گرفته می‌شوند چون «هزینه منفی» بی‌معنی است
@@ -2717,8 +2724,7 @@ function dashboardStats(){
     if(bal.net<0) custDebt += Math.abs(bal.net);
     else custCredit += bal.net;
   });
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+  const monthStart = jalaliMonthStartISO();
   const todayS = todayStr();
   let lumera=0, drafting=0, graphic=0;
   invoices.filter(i=> (i.status==='final'||i.status==='paid') && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
