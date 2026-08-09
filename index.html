@@ -2042,27 +2042,46 @@ function bindProductsEvents(){
 }
 
 /* ---------- HISTORY TAB ---------- */
+let historySearchQuery = '';
+let historyListLimit = 10;
+
 function renderHistoryTab(){
   const note = `<p class="note" style="margin-bottom:10px">این‌جا قیمتِ ثبت‌شده هر محصول در طول زمان نگه‌داری می‌شود — هم برای محاسبه خودکار درصد سربار، هم به‌عنوان آخرین قیمت فروش در فاکتور</p>`;
-  return note + (records.length===0? `<p class="empty">هنوز هیچ محصولی ثبت نشده</p>` : records.map(r=>`
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div class="card-title">${escapeAttr(r.name)}</div>
-          <div class="card-sub">${jalaliStr(r.date)}</div>
+  if(records.length===0) return note + `<p class="empty">هنوز هیچ محصولی ثبت نشده</p>`;
+
+  const q = historySearchQuery.trim().toLowerCase();
+  const filtered = q==='' ? records : records.filter(r=> r.name.toLowerCase().includes(q));
+  const visible = filtered.slice(0, historyListLimit);
+
+  return `
+    ${note}
+    <input id="historySearchInput" placeholder="جستجو بر اساس نام محصول..." value="${escapeAttr(historySearchQuery)}" style="margin-bottom:10px">
+    ${filtered.length===0? '<p class="empty">محصولی پیدا نشد</p>' : `
+      <div class="note" style="margin:0 0 8px;text-align:right">${toPersianDigits(filtered.length)} رکورد</div>
+      ${visible.map(r=>`
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div class="card-title">${escapeAttr(r.name)}</div>
+              <div class="card-sub">${jalaliStr(r.date)}</div>
+            </div>
+            <button class="rec-delete btn-icon" data-id="${r.id}">×</button>
+          </div>
+          <div class="grid2">
+            <span>تمام‌شده: ${fmt(r.totalCost)} ت</span>
+            <span>فروش: ${fmt(r.consumerPrice)} ت</span>
+            <span style="color:var(--red);font-weight:700">سود: ${fmt(r.profit)} ت</span>
+            <span>٪${r.profitPct.toFixed(1)}</span>
+          </div>
         </div>
-        <button class="rec-delete btn-icon" data-id="${r.id}">×</button>
-      </div>
-      <div class="grid2">
-        <span>تمام‌شده: ${fmt(r.totalCost)} ت</span>
-        <span>فروش: ${fmt(r.consumerPrice)} ت</span>
-        <span style="color:var(--red);font-weight:700">سود: ${fmt(r.profit)} ت</span>
-        <span>٪${r.profitPct.toFixed(1)}</span>
-      </div>
-    </div>
-  `).join(''));
+      `).join('')}
+      ${filtered.length>visible.length? `<button id="historyLoadMoreBtn" class="btn btn-outline" style="width:100%;margin-top:10px">نمایش موارد بیشتر (${toPersianDigits(filtered.length-visible.length)} مورد دیگر)</button>` : ''}
+    `}
+  `;
 }
 function bindHistoryEvents(){
+  document.getElementById('historySearchInput')?.addEventListener('input', e=>{ historySearchQuery = e.target.value; historyListLimit = 10; render(); });
+  document.getElementById('historyLoadMoreBtn')?.addEventListener('click', ()=>{ historyListLimit += 10; render(); });
   document.querySelectorAll('.rec-delete').forEach(el=>{
     el.addEventListener('click', e=>{
       records = records.filter(r=>r.id!==e.currentTarget.dataset.id);
@@ -2249,9 +2268,12 @@ function supplierBalance(supplierId){
 
 /* ---------- EXPENSES ---------- */
 const EXPENSE_TAG_LABELS = { business:'کسب‌وکار', personal:'شخصی' };
-let expView = 'list'; // 'list' | 'manageCategories'
+let expView = 'summary'; // 'summary' | 'add' | 'list' | 'categories'
 let expFilterTag = 'all'; // 'all' | 'business' | 'personal'
+let expSearchQuery = ''; // جستجو در تاریخچه خرج‌ها
+let expListLimit = 15; // برای نمایش تدریجی تاریخچه (به‌جای نمایش کل لیست یک‌جا)
 let expenseDraft = { categoryId:'', categoryName:'', amount:'', date: todayStr(), note:'', tag:'business' };
+let editingExpenseId = null; // اگر مقدار داشته باشد، فرم ثبت خرج در حالت ویرایش یک خرج موجود است
 let newCategoryDraft = { name:'', tag:'business', defaultAmount:'', dueDay:'' };
 let editingCategoryId = null; // اگر مقدار داشته باشد، فرم بالا در حالت ویرایش دسته‌بندی موجود است
 
@@ -2264,26 +2286,57 @@ function pickExpenseCategory(catId){
   if(c.defaultAmount) expenseDraft.amount = c.defaultAmount;
 }
 
+function blankExpenseDraft(tag){
+  return { categoryId:'', categoryName:'', amount:'', date: todayStr(), note:'', tag: tag || 'business' };
+}
+
+function startEditExpense(id){
+  const e = expenses.find(x=>x.id===id);
+  if(!e) return;
+  editingExpenseId = id;
+  expenseDraft = { categoryId: e.categoryId||'', categoryName: e.categoryName, amount: String(e.amount), date: e.date, note: e.note||'', tag: e.tag };
+  expView = 'add';
+}
+
+function cancelEditExpense(){
+  editingExpenseId = null;
+  expenseDraft = blankExpenseDraft(expenseDraft.tag);
+}
+
 function saveExpenseDraft(){
   const amt = parseFloat(expenseDraft.amount);
   if(!expenseDraft.categoryName.trim()){ alert('نام دسته‌بندی را وارد کنید'); return; }
   if(!amt || amt<=0){ alert('مبلغ را درست وارد کنید'); return; }
-  expenses = [...expenses, {
-    id: Date.now().toString()+Math.random().toString(36).slice(2),
-    categoryId: expenseDraft.categoryId || null,
-    categoryName: expenseDraft.categoryName.trim(),
-    amount: amt,
-    date: expenseDraft.date || todayStr(),
-    note: expenseDraft.note.trim(),
-    tag: expenseDraft.tag
-  }];
+  if(editingExpenseId){
+    expenses = expenses.map(e=> e.id===editingExpenseId ? {
+      ...e,
+      categoryId: expenseDraft.categoryId || null,
+      categoryName: expenseDraft.categoryName.trim(),
+      amount: amt,
+      date: expenseDraft.date || todayStr(),
+      note: expenseDraft.note.trim(),
+      tag: expenseDraft.tag
+    } : e);
+    editingExpenseId = null;
+  } else {
+    expenses = [...expenses, {
+      id: Date.now().toString()+Math.random().toString(36).slice(2),
+      categoryId: expenseDraft.categoryId || null,
+      categoryName: expenseDraft.categoryName.trim(),
+      amount: amt,
+      date: expenseDraft.date || todayStr(),
+      note: expenseDraft.note.trim(),
+      tag: expenseDraft.tag
+    }];
+  }
   saveJSON(STORE_KEYS.expenses, expenses);
-  expenseDraft = { categoryId:'', categoryName:'', amount:'', date: todayStr(), note:'', tag: expenseDraft.tag };
+  expenseDraft = blankExpenseDraft(expenseDraft.tag);
 }
 
 function deleteExpense(id){
   expenses = expenses.filter(e=>e.id!==id);
   saveJSON(STORE_KEYS.expenses, expenses);
+  if(editingExpenseId===id) cancelEditExpense();
 }
 
 function saveExpenseCategory(){
@@ -2538,48 +2591,33 @@ function bindSuppliersEvents(){
   });
 }
 
-function renderExpensesTab(){
-  if(expView==='manageCategories'){
-    return `
-      <button id="expBackBtn" class="btn btn-outline" style="margin-bottom:10px">← بازگشت</button>
-      <div class="box-gray">
-        <div style="font-weight:700;margin-bottom:8px;font-size:13px">${editingCategoryId? 'ویرایش دسته‌بندی' : 'دسته‌بندی ثابت جدید'}</div>
-        <input id="newCatName" placeholder="نام دسته‌بندی (مثلا اجاره، برق)" value="${escapeAttr(newCategoryDraft.name)}" style="margin-bottom:8px">
-        <div class="row-flex" style="margin-bottom:8px">
-          <select id="newCatTag" style="flex:1">
-            <option value="business" ${newCategoryDraft.tag==='business'?'selected':''}>کسب‌وکار</option>
-            <option value="personal" ${newCategoryDraft.tag==='personal'?'selected':''}>شخصی</option>
-          </select>
-          <input id="newCatDefaultAmount" type="text" inputmode="decimal" placeholder="مبلغ پیش‌فرض (اختیاری)" value="${escapeAttr(newCategoryDraft.defaultAmount)}" style="flex:1">
-        </div>
-        <input id="newCatDueDay" type="text" inputmode="decimal" placeholder="روز سررسید هر ماه (اختیاری — مثلا ۵)" value="${escapeAttr(newCategoryDraft.dueDay)}" style="margin-bottom:8px">
-        <p class="note" style="margin:0 0 8px">اگر روز سررسید را وارد کنی، چند روز قبل از آن در داشبورد یادآوری می‌بینی</p>
-        <div class="row-flex">
-          <button id="newCatSaveBtn" class="btn btn-red" style="flex:1">${editingCategoryId? 'ذخیره ویرایش' : 'ذخیره دسته‌بندی'}</button>
-          ${editingCategoryId? `<button id="newCatCancelBtn" class="btn btn-outline" style="flex:1">انصراف</button>` : ''}
-        </div>
-      </div>
-      <div style="font-weight:700;font-size:13px;margin-bottom:8px">دسته‌های ثابت موجود</div>
-      ${expenseCategories.length===0? '<p class="empty">هنوز دسته‌بندی ثابتی ثبت نشده</p>' : expenseCategories.map(c=>`
-        <div class="card${editingCategoryId===c.id?' card-active':''}">
-          <div class="card-title"><span>${escapeAttr(c.name)}</span>
-            <div>
-              <button class="btn-icon expcat-edit" data-id="${c.id}" style="color:#000">✎</button>
-              <button class="btn-icon expcat-delete" data-id="${c.id}">×</button>
-            </div>
-          </div>
-          <div class="card-sub">${EXPENSE_TAG_LABELS[c.tag]}${c.defaultAmount? ' — مبلغ پیش‌فرض: '+fmt(c.defaultAmount)+' ت':''}${c.dueDay? ' — سررسید: روز '+c.dueDay+' هر ماه':''}</div>
-        </div>
-      `).join('')}
-    `;
-  }
+// چهار زیرِ-بخش تب هزینه‌ها — به‌جای یک صفحه بلند و شلوغ، هر بخش را جدا و سریع در دسترس نگه می‌دارد
+const EXP_SUBVIEWS = [
+  { key:'summary', label:'خلاصه' },
+  { key:'add', label:'ثبت خرج' },
+  { key:'list', label:'تاریخچه' },
+  { key:'categories', label:'دسته‌بندی‌ها' },
+];
 
+function expSubNav(){
+  return `<div class="pills" style="margin-bottom:14px">
+    ${EXP_SUBVIEWS.map(v=>`<button class="pill exp-subview-btn ${expView===v.key?'pill-active':''}" data-view="${v.key}">${v.label}</button>`).join('')}
+  </div>`;
+}
+
+function renderExpensesTab(){
+  if(expView==='categories') return expSubNav() + renderExpCategoriesView();
+  if(expView==='add') return expSubNav() + renderExpAddView();
+  if(expView==='list') return expSubNav() + renderExpListView();
+  return expSubNav() + renderExpSummaryView();
+}
+
+function renderExpSummaryView(){
   const summary = expenseMonthSummary();
   const dStats = dashboardStats();
   const monthIncome = dStats.lumera + dStats.drafting + dStats.graphic;
   const netBalance = monthIncome - summary.total;
-  const sortedExpenses = [...expenses].sort((a,b)=> b.date.localeCompare(a.date));
-  const filtered = expFilterTag==='all'? sortedExpenses : sortedExpenses.filter(e=>e.tag===expFilterTag);
+  const recentExpenses = [...expenses].sort((a,b)=> b.date.localeCompare(a.date)).slice(0,3);
 
   return `
     <div class="card" style="margin-bottom:14px">
@@ -2600,10 +2638,24 @@ function renderExpensesTab(){
       </div>
     </div>
 
-    <div style="font-weight:700;font-size:13px;margin-bottom:8px">بدهی‌ها و طلب‌ها (کل سیستم)</div>
+    <button id="expGotoAddBtn" class="btn btn-red" style="width:100%;margin-bottom:16px">+ ثبت خرج جدید</button>
+
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px">آخرین خرج‌ها</div>
+    ${recentExpenses.length===0? '<p class="empty">هنوز خرجی ثبت نشده</p>' : recentExpenses.map(e=>`
+      <div class="card">
+        <div class="card-title"><span>${escapeAttr(e.categoryName)}</span>
+          <div><button class="btn-icon exp-edit" data-id="${e.id}" style="color:#000">✎</button><button class="btn-icon exp-delete" data-id="${e.id}">×</button></div>
+        </div>
+        <div class="card-sub">${jalaliStr(e.date)} — ${EXPENSE_TAG_LABELS[e.tag]}${e.note? ' — '+escapeAttr(e.note):''}</div>
+        <div style="margin-top:4px;font-weight:700">${fmt(e.amount)} تومان</div>
+      </div>
+    `).join('')}
+    ${recentExpenses.length>0? `<button id="expGotoListBtn" class="btn btn-outline" style="width:100%;margin-top:10px">مشاهده کل تاریخچه ←</button>` : ''}
+
+    <div style="font-weight:700;font-size:13px;margin:20px 0 8px">بدهی‌ها و طلب‌ها (کل سیستم)</div>
     ${(()=>{ const rows = getCombinedBalances();
       return rows.length===0 ? '<p class="empty">مشتری یا تامین‌کننده‌ای ثبت نشده</p>' : `
-      <div class="card" style="margin-bottom:14px">
+      <div class="card">
         ${rows.map((r,i)=>`
           <div class="r-row" style="${i<rows.length-1?'border-bottom:1px solid #f0f0f0;':''}padding:6px 0">
             <span>${escapeAttr(r.name)} <span style="color:#bbb;font-size:11px">(${r.type})</span></span>
@@ -2612,17 +2664,23 @@ function renderExpensesTab(){
         `).join('')}
       </div>`;
     })()}
+  `;
+}
 
-    <div style="font-weight:700;font-size:13px;margin-bottom:8px">ثبت سریع خرج ثابت</div>
-    ${expenseCategories.length===0? '<p class="note" style="margin-bottom:10px">هنوز دسته‌بندی ثابتی نساختی — از پایین صفحه «مدیریت دسته‌بندی‌ها» رو بزن</p>' : `
+function renderExpAddView(){
+  const isEditing = !!editingExpenseId;
+  return `
+    ${isEditing? `<p class="note" style="margin-bottom:10px">در حال ویرایش خرج ثبت‌شده — پس از تغییر روی «ذخیره ویرایش» بزن</p>` : ''}
+    ${expenseCategories.length===0? '' : `
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px">ثبت سریع خرج ثابت</div>
       <div class="pills">
         ${expenseCategories.map(c=>`<button class="pill exp-cat-pick ${expenseDraft.categoryId===c.id?'pill-active':''}" data-id="${c.id}">${escapeAttr(c.name)}</button>`).join('')}
       </div>
     `}
 
     <div class="box-gray" style="margin-bottom:16px">
-      <div style="font-weight:700;margin-bottom:4px;font-size:13px">ثبت خرج</div>
-      <p class="note" style="margin:0 0 8px">برای خرج‌های ثابت از دکمه‌های بالا انتخاب کن، یا برای خرج‌های روزانه/متغیر (کرایه، قهوه و...) فقط نام را تایپ کن</p>
+      <div style="font-weight:700;margin-bottom:4px;font-size:13px">${isEditing? 'ویرایش خرج' : 'ثبت خرج'}</div>
+      ${isEditing? '' : `<p class="note" style="margin:0 0 8px">برای خرج‌های ثابت از دکمه‌های بالا انتخاب کن، یا برای خرج‌های روزانه/متغیر (کرایه، قهوه و...) فقط نام را تایپ کن</p>`}
       <input id="expCategoryName" placeholder="نام دسته‌بندی یا خرج (مثلا کرایه ماشین، قهوه)" value="${escapeAttr(expenseDraft.categoryName)}" style="margin-bottom:8px">
       <div class="row-flex" style="margin-bottom:8px">
         <select id="expTag" style="flex:1">
@@ -2635,32 +2693,97 @@ function renderExpensesTab(){
         ${renderJalaliDateInput('expDate', expenseDraft.date, 'flex:1')}
         <input id="expNote" placeholder="یادداشت (اختیاری)" value="${escapeAttr(expenseDraft.note)}" style="flex:1">
       </div>
-      <button id="expSaveBtn" class="btn btn-red" style="width:100%">ثبت خرج</button>
+      <div class="row-flex">
+        <button id="expSaveBtn" class="btn btn-red" style="flex:1">${isEditing? 'ذخیره ویرایش' : 'ثبت خرج'}</button>
+        ${isEditing? `<button id="expCancelEditBtn" class="btn btn-outline" style="flex:1">انصراف</button>` : ''}
+      </div>
     </div>
 
-    <button id="expManageCatBtn" class="btn btn-outline" style="width:100%;margin-bottom:16px">مدیریت دسته‌بندی‌های ثابت</button>
+    ${expenseCategories.length===0? `<p class="note" style="margin-bottom:10px">دسته‌بندی ثابتی نداری — از بخش «دسته‌بندی‌ها» یکی بساز تا ثبت خرج سریع‌تر بشه</p>` : ''}
+  `;
+}
 
-    <div style="font-weight:700;font-size:13px;margin-bottom:8px">تاریخچه خرج‌ها</div>
+function renderExpListView(){
+  const sortedExpenses = [...expenses].sort((a,b)=> b.date.localeCompare(a.date));
+  const q = expSearchQuery.trim();
+  const searched = q==='' ? sortedExpenses : sortedExpenses.filter(e=>
+    e.categoryName.toLowerCase().includes(q.toLowerCase()) || (e.note||'').toLowerCase().includes(q.toLowerCase())
+  );
+  const filtered = expFilterTag==='all'? searched : searched.filter(e=>e.tag===expFilterTag);
+  const visible = filtered.slice(0, expListLimit);
+  const filteredTotal = filtered.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
+
+  return `
+    <input id="expSearchInput" placeholder="جستجو بر اساس نام یا یادداشت..." value="${escapeAttr(expSearchQuery)}" style="margin-bottom:8px">
     <div class="pills">
       <button class="pill exp-filter ${expFilterTag==='all'?'pill-active':''}" data-tag="all">همه</button>
       <button class="pill exp-filter ${expFilterTag==='business'?'pill-active':''}" data-tag="business">کسب‌وکار</button>
       <button class="pill exp-filter ${expFilterTag==='personal'?'pill-active':''}" data-tag="personal">شخصی</button>
     </div>
-    ${filtered.length===0? '<p class="empty">خرجی ثبت نشده</p>' : filtered.map(e=>`
-      <div class="card">
-        <div class="card-title"><span>${escapeAttr(e.categoryName)}</span>
-          <button class="btn-icon exp-delete" data-id="${e.id}">×</button>
+    ${filtered.length===0? '<p class="empty">خرجی پیدا نشد</p>' : `
+      <div class="r-row bold" style="margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #eee">
+        <span>${toPersianDigits(filtered.length)} مورد</span><span>${fmt(filteredTotal)} تومان</span>
+      </div>
+      ${visible.map(e=>`
+        <div class="card">
+          <div class="card-title"><span>${escapeAttr(e.categoryName)}</span>
+            <div><button class="btn-icon exp-edit" data-id="${e.id}" style="color:#000">✎</button><button class="btn-icon exp-delete" data-id="${e.id}">×</button></div>
+          </div>
+          <div class="card-sub">${jalaliStr(e.date)} — ${EXPENSE_TAG_LABELS[e.tag]}${e.note? ' — '+escapeAttr(e.note):''}</div>
+          <div style="margin-top:4px;font-weight:700">${fmt(e.amount)} تومان</div>
         </div>
-        <div class="card-sub">${jalaliStr(e.date)} — ${EXPENSE_TAG_LABELS[e.tag]}${e.note? ' — '+escapeAttr(e.note):''}</div>
-        <div style="margin-top:4px;font-weight:700">${fmt(e.amount)} تومان</div>
+      `).join('')}
+      ${filtered.length>visible.length? `<button id="expLoadMoreBtn" class="btn btn-outline" style="width:100%;margin-top:10px">نمایش موارد بیشتر (${toPersianDigits(filtered.length-visible.length)} مورد دیگر)</button>` : ''}
+    `}
+  `;
+}
+
+function renderExpCategoriesView(){
+  return `
+    <div class="box-gray">
+      <div style="font-weight:700;margin-bottom:8px;font-size:13px">${editingCategoryId? 'ویرایش دسته‌بندی' : 'دسته‌بندی ثابت جدید'}</div>
+      <input id="newCatName" placeholder="نام دسته‌بندی (مثلا اجاره، برق)" value="${escapeAttr(newCategoryDraft.name)}" style="margin-bottom:8px">
+      <div class="row-flex" style="margin-bottom:8px">
+        <select id="newCatTag" style="flex:1">
+          <option value="business" ${newCategoryDraft.tag==='business'?'selected':''}>کسب‌وکار</option>
+          <option value="personal" ${newCategoryDraft.tag==='personal'?'selected':''}>شخصی</option>
+        </select>
+        <input id="newCatDefaultAmount" type="text" inputmode="decimal" placeholder="مبلغ پیش‌فرض (اختیاری)" value="${escapeAttr(newCategoryDraft.defaultAmount)}" style="flex:1">
+      </div>
+      <input id="newCatDueDay" type="text" inputmode="decimal" placeholder="روز سررسید هر ماه (اختیاری — مثلا ۵)" value="${escapeAttr(newCategoryDraft.dueDay)}" style="margin-bottom:8px">
+      <p class="note" style="margin:0 0 8px">اگر روز سررسید را وارد کنی، چند روز قبل از آن در داشبورد یادآوری می‌بینی</p>
+      <div class="row-flex">
+        <button id="newCatSaveBtn" class="btn btn-red" style="flex:1">${editingCategoryId? 'ذخیره ویرایش' : 'ذخیره دسته‌بندی'}</button>
+        ${editingCategoryId? `<button id="newCatCancelBtn" class="btn btn-outline" style="flex:1">انصراف</button>` : ''}
+      </div>
+    </div>
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px">دسته‌های ثابت موجود</div>
+    ${expenseCategories.length===0? '<p class="empty">هنوز دسته‌بندی ثابتی ثبت نشده</p>' : expenseCategories.map(c=>`
+      <div class="card${editingCategoryId===c.id?' card-active':''}">
+        <div class="card-title"><span>${escapeAttr(c.name)}</span>
+          <div>
+            <button class="btn-icon expcat-edit" data-id="${c.id}" style="color:#000">✎</button>
+            <button class="btn-icon expcat-delete" data-id="${c.id}">×</button>
+          </div>
+        </div>
+        <div class="card-sub">${EXPENSE_TAG_LABELS[c.tag]}${c.defaultAmount? ' — مبلغ پیش‌فرض: '+fmt(c.defaultAmount)+' ت':''}${c.dueDay? ' — سررسید: روز '+c.dueDay+' هر ماه':''}</div>
       </div>
     `).join('')}
   `;
 }
 
 function bindExpensesEvents(){
-  document.getElementById('expManageCatBtn')?.addEventListener('click', ()=>{ expView='manageCategories'; render(); });
-  document.getElementById('expBackBtn')?.addEventListener('click', ()=>{ expView='list'; render(); });
+  document.querySelectorAll('.exp-subview-btn').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const v = e.currentTarget.dataset.view;
+      if(v!=='add' && editingExpenseId) cancelEditExpense(); // اگر وسط ویرایش از فرم خارج شد، حالت ویرایش پاک شود
+      expView = v;
+      render();
+    });
+  });
+  document.getElementById('expGotoAddBtn')?.addEventListener('click', ()=>{ expView='add'; render(); });
+  document.getElementById('expGotoListBtn')?.addEventListener('click', ()=>{ expView='list'; render(); });
+  document.getElementById('expCancelEditBtn')?.addEventListener('click', ()=>{ cancelEditExpense(); render(); });
 
   document.getElementById('newCatName')?.addEventListener('input', e=>{ newCategoryDraft.name = e.target.value; });
   document.getElementById('newCatTag')?.addEventListener('change', e=>{ newCategoryDraft.tag = e.target.value; });
@@ -2690,10 +2813,20 @@ function bindExpensesEvents(){
   document.getElementById('expAmount')?.addEventListener('input', e=>{ expenseDraft.amount = e.target.value; });
   bindJalaliDateInput('expDate', iso=>{ expenseDraft.date = iso; });
   document.getElementById('expNote')?.addEventListener('input', e=>{ expenseDraft.note = e.target.value; });
-  document.getElementById('expSaveBtn')?.addEventListener('click', ()=>{ saveExpenseDraft(); render(); });
+  document.getElementById('expSaveBtn')?.addEventListener('click', ()=>{
+    const wasEditing = !!editingExpenseId;
+    saveExpenseDraft();
+    expView = wasEditing ? 'list' : 'summary'; // بعد از ویرایش برگرد به تاریخچه، بعد از ثبت جدید برگرد به خلاصه
+    render();
+  });
 
+  document.getElementById('expSearchInput')?.addEventListener('input', e=>{ expSearchQuery = e.target.value; expListLimit = 15; render(); });
   document.querySelectorAll('.exp-filter').forEach(el=>{
-    el.addEventListener('click', e=>{ expFilterTag = e.currentTarget.dataset.tag; render(); });
+    el.addEventListener('click', e=>{ expFilterTag = e.currentTarget.dataset.tag; expListLimit = 15; render(); });
+  });
+  document.getElementById('expLoadMoreBtn')?.addEventListener('click', ()=>{ expListLimit += 15; render(); });
+  document.querySelectorAll('.exp-edit').forEach(el=>{
+    el.addEventListener('click', e=>{ startEditExpense(e.currentTarget.dataset.id); render(); });
   });
   document.querySelectorAll('.exp-delete').forEach(el=>{
     el.addEventListener('click', e=>{
@@ -2917,6 +3050,8 @@ function reportBarChart(bars){
   </svg>`;
 }
 
+let reportCustLimit = 5;
+
 function renderReportTab(){
   const d = reportData(reportPeriod);
   const cats = [
@@ -2964,7 +3099,7 @@ function renderReportTab(){
         <div class="r-row bold accent"><span>${escapeAttr(best.name)}</span><span>${fmt(best.totalPurchase)} ت</span></div>
         <div class="card-sub">${toPersianDigits(best.invoiceCount)} فاکتور صادرشده/تسویه‌شده</div>
       </div>` : ''}
-      ${custData.map(c=>`
+      ${custData.slice(0,reportCustLimit).map(c=>`
         <div class="card" style="margin-top:8px">
           <div class="card-title"><span>${escapeAttr(c.name)}</span></div>
           <div class="grid2" style="margin-top:4px">
@@ -2975,6 +3110,7 @@ function renderReportTab(){
             : (c.creditRemaining>0 ? `<div style="margin-top:4px;font-weight:700;color:#1A7A3A">طلب مشتری: ${fmt(c.creditRemaining)} ت</div>`
             : `<div style="margin-top:4px;font-size:12px;color:#6B7075">تسویه کامل</div>`)}
         </div>`).join('')}
+      ${custData.length>reportCustLimit? `<button id="reportCustMoreBtn" class="btn btn-outline" style="width:100%;margin-top:10px">نمایش موارد بیشتر (${toPersianDigits(custData.length-reportCustLimit)} مورد دیگر)</button>` : ''}
     `}
   `;
 }
@@ -2994,6 +3130,7 @@ function bindReportEvents(){
     reportStartDate = todayStr();
     render();
   });
+  document.getElementById('reportCustMoreBtn')?.addEventListener('click', ()=>{ reportCustLimit += 5; render(); });
 }
 
 function renderNavOverlay(){
