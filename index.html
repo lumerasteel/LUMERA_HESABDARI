@@ -1278,7 +1278,7 @@ function renderInvoiceListTab(){
     return name.includes(q) || phone.includes(q) || code.includes(q) || codeDisplay.includes(q) ||
            numStr.includes(q) || numRaw.includes(q) ||
            dateG.includes(q) || dateJ.includes(q) || pStatus.includes(q) || status.includes(q);
-  });
+  }).sort((a,b)=> (b.number||0)-(a.number||0)); // جدیدترین فاکتور (بیشترین شماره) همیشه بالای لیست
   return `
     ${renderBankInfoSettings()}
     <button id="newInvBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ فاکتور جدید</button>
