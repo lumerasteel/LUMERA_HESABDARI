@@ -1039,8 +1039,7 @@ const ACTIVITY_TERMS = {
     'زمان تحویل ۱۰ روز کاری پس از دریافت بیعانه.',
     'هرگونه تغییرات پس از تأیید طرح شامل هزینه مجدد می‌باشد.',
     'تحویل درب کارگاه — ارسال با باربری هزینه به عهده مشتری.',
-    'ضمانت ۶ ماهه جوش.',
-    'ضمانت پس از فروش شامل اصلاح جزئی در صورت ایراد ساخت.',
+    'ضمانت ۶ ماهه جوش، شامل اصلاح جزئی در صورت ایراد ساخت.',
   ],
   drafting: [
     'نقشه بر اساس اطلاعات و ابعاد ارائه‌شده توسط مشتری تهیه می‌شود.',
@@ -1052,9 +1051,11 @@ const ACTIVITY_TERMS = {
     'طراحی بر اساس بریف و سلیقه اعلام‌شده توسط مشتری انجام می‌شود.',
     'شامل حداکثر ۲ مرحله بازبینی (ریویو) رایگان؛ بازبینی‌های بیشتر هزینه جداگانه دارد.',
     'زمان تحویل طرح اولیه ۵ روز کاری پس از دریافت بیعانه.',
-    'فایل‌های لایه‌باز (قابل ویرایش) فقط پس از تسویه کامل ارسال می‌شوند.',
   ],
 };
+// نکته: قانون «فایل/محصول نهایی فقط پس از تسویه کامل تحویل داده می‌شود» توی FINANCIAL_TERMS_COMMON
+// هست و برای هر سه نوع فعالیت (از جمله گرافیک) اعمال می‌شه؛ قبلاً همین مضمون توی لیست گرافیک هم
+// جداگانه تکرار شده بود که حذف شد تا در فاکتور دوبار نیاد.
 // قوانین مالی — این‌ها ثابت‌اند و برای هر نوع فعالیتی یکسان اعمال می‌شوند
 const FINANCIAL_TERMS_COMMON = [
   'شروع هرگونه کار منوط به دریافت پیش‌پرداخت (بیعانه) است.',
@@ -1504,7 +1505,7 @@ function bindInvoiceListEvents(){
   document.querySelectorAll('.inv-jpg').forEach(el=>{
     el.addEventListener('click', e=>{
       const inv = invoices.find(i=>i.id===e.currentTarget.dataset.id);
-      if(inv) exportInvoiceJPG(inv);
+      if(inv) exportInvoiceJPG(inv, e.currentTarget);
     });
   });
   document.querySelectorAll('.inv-print').forEach(el=>{
@@ -1722,22 +1723,45 @@ function buildA4InvoiceHTML(inv){
     </div>
   </div>`;
 }
-function exportInvoiceJPG(inv){
-  let root = document.getElementById('invoiceRenderRoot');
-  if(!root){
-    root = document.createElement('div');
-    root.id = 'invoiceRenderRoot';
-    document.body.appendChild(root);
-  }
+// exportInvoiceJPG می‌تواند هم‌زمان چند بار صدا زده بشه (مثلا دوبار کلیک سریع، یا خروجی گرفتن از چند فاکتور پشت‌سرهم
+// قبل از اتمام قبلی). قبلاً همه‌ی خروجی‌ها یک المنت مشترک (#invoiceRenderRoot) رو به اشتراک می‌ذاشتن و innerHTML
+// اون رو بازنویسی می‌کردن؛ در نتیجه اگر یک export هنوز در حال گرفتن عکس (html2canvas) بود و export بعدی innerHTML
+// رو عوض می‌کرد، خروجی یا خالی/اشتباه می‌شد یا اصلاً تولید نمی‌شد. حالا هر export یک container کاملاً مجزا و
+// یک‌بارمصرف می‌سازه که با پایان کار همون export حذف می‌شه، پس چند export هم‌زمان با هم تداخل ندارن. همچنین دکمه‌ی
+// مربوطه در حین export غیرفعال می‌شه تا از دوبار اجرا شدن با یک کلیک جلوگیری بشه، و خطاها دیگه بی‌صدا گم نمی‌شن.
+let invoiceExportInFlight = new Set();
+function exportInvoiceJPG(inv, triggerBtn){
+  if(invoiceExportInFlight.has(inv.id)) return; // جلوگیری از اجرای هم‌زمان دوباره برای همون فاکتور (مثلا دابل کلیک)
+  invoiceExportInFlight.add(inv.id);
+  if(triggerBtn){ triggerBtn.disabled = true; triggerBtn.style.opacity = '0.6'; }
+
+  const root = document.createElement('div');
+  root.style.position = 'fixed';
+  root.style.left = '-9999px';
+  root.style.top = '0';
   root.innerHTML = buildA4InvoiceHTML(inv);
+  document.body.appendChild(root);
   const target = root.querySelector('.a4-wrap');
+
+  const cleanup = ()=>{
+    invoiceExportInFlight.delete(inv.id);
+    if(triggerBtn){ triggerBtn.disabled = false; triggerBtn.style.opacity = ''; }
+    if(root.parentNode) root.parentNode.removeChild(root);
+  };
+
   html2canvas(target, {scale:3, useCORS:true, allowTaint:true, backgroundColor:'#ffffff', logging:false}).then(canvas=>{
     const custNameForFile = (inv.customerName||'بدون نام').trim().replace(/[\\/:*?"<>|]/g,'-');
     const filename = 'LUMERASTEEL-' + custNameForFile + '-' + inv.number + '.jpg';
     canvas.toBlob(blob=>{
-      saveBlobSmart(blob, filename);
-      root.innerHTML = '';
+      if(!blob){ alert('خروجی گرفتن از فاکتور با خطا مواجه شد، دوباره تلاش کن'); cleanup(); return; }
+      saveBlobSmart(blob, filename).then(()=>cleanup()).catch(()=>{
+        alert('ذخیره فایل خروجی فاکتور با خطا مواجه شد');
+        cleanup();
+      });
     }, 'image/jpeg', 0.97);
+  }).catch(()=>{
+    alert('گرفتن خروجی عکس فاکتور با خطا مواجه شد، دوباره تلاش کن');
+    cleanup();
   });
 }
 function printInvoice(inv){
