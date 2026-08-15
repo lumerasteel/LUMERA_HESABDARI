@@ -1115,7 +1115,10 @@ function invoicePrevBalanceAuto(inv){
     const saved = invoices.find(i=>i.id===inv.id);
     if(saved && saved.status!=='draft' && saved.status!=='cancelled'){
       const t = computeInvoiceTotals(saved);
-      net = net + Math.max(0, t.balance); // مانده این فاکتور را به بستانکاری برگردان تا حذف شود
+      // باید هم سمت بدهکاری (t.balance) و هم سمت اضافه‌پرداخت (t.overpaid) خودِ همین فاکتور خنثی بشه؛
+      // قبلاً فقط t.balance برگردانده می‌شد و t.overpaid این فاکتور به‌اشتباه به‌عنوان «بستانکاری از فاکتور
+      // قبلی» باقی می‌ماند و باعث دوبار حساب‌شدن اضافه‌پرداخت همین فاکتور در «مانده نهایی» می‌شد.
+      net = net + Math.max(0, t.balance) - t.overpaid;
     }
   }
   return -net; // برگرداندن به فرم «بدهکاری مثبت»
