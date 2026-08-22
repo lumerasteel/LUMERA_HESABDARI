@@ -318,6 +318,9 @@
   .a4-bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;flex:1;}
   .a4-terms-box{background:#F7F7F7;border-radius:12px;padding:12px 14px;}
   .a4-terms-title{font-size:10.5px;font-weight:700;color:#2F3338;margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--c-accent);display:inline-block;}
+  .a4-terms-subtitle{font-size:9.5px;font-weight:700;color:#6B7075;margin:8px 0 4px;}
+  .a4-terms-subtitle:first-of-type{margin-top:0;}
+  .a4-group-row td{background:#F0F0F0;font-size:9.5px;font-weight:700;color:#2F3338;padding:4px 8px;text-align:right;}
   .a4-terms-list{list-style:none;display:flex;flex-direction:column;gap:5px;padding:0;margin:0;}
   .a4-terms-list li{font-size:9.5px;color:#6B7075;line-height:1.65;padding-right:10px;position:relative;}
   .a4-terms-list li::before{content:'';position:absolute;right:0;top:6px;width:3.5px;height:3.5px;background:#C0C0C0;border-radius:50%;}
@@ -655,7 +658,7 @@ function clearCalc(){
 /* ---------- INVOICE STATE ---------- */
 let invTab = 'list'; // 'list' | 'edit'
 let editingInvId = null;
-function blankInvoiceLine(){ return {id: Date.now().toString()+Math.random().toString(36).slice(2), productId:'', qty:1, customName:'', customPrice:''}; }
+function blankInvoiceLine(){ return {id: Date.now().toString()+Math.random().toString(36).slice(2), productId:'', qty:1, customName:'', customPrice:'', customCost:'', lineDiscount:'', activityType: invActiveWorkspace}; }
 function blankInvoice(){
   return {
     id: null,
@@ -683,6 +686,7 @@ function blankInvoice(){
     prevBalanceNote: '' // توضیح کوتاه (مثلاً تاریخ و عنوان بدهی قبلی)
   };
 }
+let invActiveWorkspace = 'lumera'; // فضای کاری فعال در ویرایش فاکتور — ردیف‌های جدید با همین نوع فعالیت ساخته می‌شوند
 let invDraft = blankInvoice();
 
 
@@ -1032,6 +1036,12 @@ function saveCurrentAsProduct(nameOverride, showAlert){
 let bankInfo = loadJSON(STORE_KEYS.bankInfo, { bankName:'', accountHolder:'', cardNumber:'', iban:'' });
 let bankInfoEditorOpen = false;
 const ACTIVITY_LABELS = { lumera:'ساخت LUMERA', drafting:'نقشه‌کشی', graphic:'طراحی لوگو و گرافیک' };
+// برچسب ترکیبی برای فاکتورهایی که چند فضای کاری دارن (مثلاً «ساخت LUMERA + نقشه‌کشی»)
+function invoiceActivityLabelCombined(inv){
+  const types = invoiceActivityTypesUsed(inv);
+  if(types.length===0) return ACTIVITY_LABELS[inv.activityType] || '';
+  return types.map(t=>ACTIVITY_LABELS[t]).join(' + ');
+}
 // ضوابط مخصوص هر نوع فعالیت — این‌ها جدا از هم هستن، نقشه‌کشی و گرافیک ضوابط ساخت رو به ارث نمی‌برن
 const ACTIVITY_TERMS = {
   lumera: [
@@ -1061,6 +1071,28 @@ const FINANCIAL_TERMS_COMMON = [
   'شروع هرگونه کار منوط به دریافت پیش‌پرداخت (بیعانه) است.',
   'فایل یا محصول نهایی تنها پس از تسویه کامل هزینه تحویل داده می‌شود.',
 ];
+// شرایط و ضوابط رو برای فاکتورهای چند-فضای‌کاری، جدا جدا زیر عنوان هر فضای کاری نشون می‌ده تا با هم قاطی نشن؛
+// برای فاکتور تک‌نوع (اکثر فاکتورها)، فقط لیست همون یک نوع رو بدون عنوان جداگانه نشون می‌ده (مثل قبل)
+function buildTermsSectionsHTML(typesUsed){
+  const types = typesUsed.length>0 ? typesUsed : ['lumera'];
+  let html = '';
+  if(types.length===1){
+    html += `<ul class="a4-terms-list">${(ACTIVITY_TERMS[types[0]]||ACTIVITY_TERMS.lumera).map(t=>`<li>${t}</li>`).join('')}</ul>`;
+  } else {
+    types.forEach(type=>{
+      html += `<div class="a4-terms-subtitle">${ACTIVITY_LABELS[type]||''}</div>`;
+      html += `<ul class="a4-terms-list">${(ACTIVITY_TERMS[type]||[]).map(t=>`<li>${t}</li>`).join('')}</ul>`;
+    });
+  }
+  html += `<ul class="a4-terms-list">${FINANCIAL_TERMS_COMMON.map(t=>`<li class="important">${t}</li>`).join('')}</ul>`;
+  return html;
+}
+// یادداشت فاکتور می‌تونه چند خط باشه؛ هر خط غیرخالی یک آیتم جدا توی خروجی چاپی می‌شه
+function invoiceNotesHTML(inv){
+  const lines = (inv.notes||'').split('\n').map(s=>s.trim()).filter(Boolean);
+  if(lines.length===0) return '';
+  return `<ul class="a4-terms-list">${lines.map(l=>`<li class="important">${escapeAttr(l)}</li>`).join('')}</ul>`;
+}
 const STATUS_LABELS = { draft:'پیش‌فاکتور', final:'صادرشده', paid:'تسویه‌شده', cancelled:'لغوشده' };
 const INVOICE_TITLES = { draft:'پیش‌فاکتور فروش', final:'فاکتور فروش', paid:'فاکتور فروش (تسویه‌شده)', cancelled:'فاکتور فروش (لغوشده)' };
 const PROJECT_STATUS_LABELS = { inquiry:'استعلام', design:'طراحی', approved:'تایید مشتری', making:'درحال ساخت', ready:'آماده تحویل', delivered:'تحویل/ارسال' };
@@ -1071,12 +1103,46 @@ function productSalePrice(productName){
   const rec = records.find(r=>r.name===productName);
   return rec ? rec.consumerPrice : 0;
 }
-function invLineUnitPrice(line){
+function productSalePriceOf(productId){
+  const p = products.find(x=>x.id===productId);
+  return p ? productSalePrice(p.name) : 0;
+}
+function invLineBasePrice(line){
   if(line.productId){
     const p = products.find(x=>x.id===line.productId);
     return p ? productSalePrice(p.name) : 0;
   }
   return parseFloat(line.customPrice)||0;
+}
+function invLineUnitPrice(line){
+  // سازگاری با نسخه‌ی قبلی: اگر «فی توافقی» قدیمی (overridePrice) روی این ردیف ثبت شده، همون رو در نظر می‌گیریم
+  if(line.overridePrice!==undefined && line.overridePrice!==null && String(line.overridePrice).trim()!==''){
+    return Math.max(0, parseFloat(line.overridePrice)||0);
+  }
+  const base = invLineBasePrice(line);
+  const disc = parseFloat(line.lineDiscount)||0;
+  return Math.max(0, base - disc);
+}
+// قیمت تمام‌شده‌ی هر واحد یک محصول ذخیره‌شده، بر اساس قیمت روز مواد و دستمزدهای ثبت‌شده در فرمول آن (بدون سربار)
+function computeProductCost(product){
+  if(!product) return 0;
+  const materialsCost = (product.items||[]).reduce((s,it)=>{
+    const mat = materials.find(m=>m.id===it.materialId);
+    const qty = parseQty(it.qty);
+    return s + (mat? mat.price*qty : 0);
+  },0);
+  const laborCost = (product.laborItems||[]).reduce((s,l)=>s+laborItemCost(l),0);
+  return materialsCost + laborCost;
+}
+// قیمت تمام‌شده‌ی هر واحد یک ردیف فاکتور: برای ردیف‌های متصل به محصول، خودکار از فرمول محصول محاسبه می‌شود؛
+// برای ردیف‌های دلخواه/دستی، فقط اگر کاربر «قیمت تمام‌شده» را وارد کرده باشد مشخص است، وگرنه صفر در نظر گرفته می‌شود
+// (یعنی کل مبلغ آن ردیف به‌عنوان سود حساب می‌شود — برای محاسبه‌ی دقیق سود، پر کردن این فیلد توصیه می‌شود)
+function invLineUnitCost(line){
+  if(line.productId){
+    const p = products.find(x=>x.id===line.productId);
+    return p ? computeProductCost(p) : 0;
+  }
+  return parseFloat(line.customCost)||0;
 }
 function invLineName(line){
   if(line.productId){
@@ -1085,10 +1151,26 @@ function invLineName(line){
   }
   return line.customName||'';
 }
+// چند تا ردیف از یک فضای کاری خاص توی این فاکتور هست — برای نشون دادن عدد کنار تب‌های فضای کاری
+function invoiceWorkspaceCount(inv, type){
+  return inv.lines.filter(l=>(l.activityType||inv.activityType||'lumera')===type).length;
+}
+// لیست نوع‌فعالیت‌هایی که واقعاً توی این فاکتور استفاده شدن (بر اساس ردیف‌ها)، به ترتیب ثابت
+function invoiceActivityTypesUsed(inv){
+  const order = ['lumera','drafting','graphic'];
+  const set = new Set(inv.lines.map(l=>l.activityType || inv.activityType || 'lumera'));
+  return order.filter(t=>set.has(t));
+}
 function computeInvoiceTotals(inv){
   const linesTotal = inv.lines.reduce((s,l)=>{
     const qty = parseQty(l.qty);
     return s + invLineUnitPrice(l)*qty;
+  },0);
+  // قیمت تمام‌شده‌ی کل فاکتور — برای ردیف‌های دلخواه بدون «قیمت تمام‌شده» ثبت‌شده، صفر در نظر گرفته می‌شود
+  // (یعنی هنوز نمی‌دونیم چقدر هزینه داشتن، پس فعلاً کل مبلغشون سود حساب می‌شه)
+  const costTotal = inv.lines.reduce((s,l)=>{
+    const qty = parseQty(l.qty);
+    return s + invLineUnitCost(l)*qty;
   },0);
   let discount = 0;
   if(parseFloat(inv.discountPct)>0) discount += linesTotal*(parseFloat(inv.discountPct)/100);
@@ -1100,7 +1182,10 @@ function computeInvoiceTotals(inv){
   const balance = Math.max(0, grandTotal - paid);
   // اگر پرداختی بیشتر از جمع کل فاکتور باشد، آن مقدار اضافه به نفع مشتری (بستانکاری) است و نباید گم شود
   const overpaid = Math.max(0, paid - grandTotal);
-  return {linesTotal, discount, grandTotal, paid, balance, overpaid, payments};
+  // سود قبل و بعد از تخفیف — تخفیف باید از سود کم بشه، نه این‌که وارد قیمت تمام‌شده (ضرر) بشه
+  const profitBeforeDiscount = linesTotal - costTotal;
+  const profitAfterDiscount = profitBeforeDiscount - discount;
+  return {linesTotal, costTotal, profitBeforeDiscount, profitAfterDiscount, discount, grandTotal, paid, balance, overpaid, payments};
 }
 
 // مانده/بدهی قبلی مشتری — مستقل از همین فاکتور، یعنی مانده‌ای که از قبل (فاکتورهای پیشین + واریزی‌ها) باقی مانده
@@ -1130,6 +1215,7 @@ function invoicePrevBalanceFinal(inv){
 
 function newInvoiceFromDraft(){
   invDraft = blankInvoice();
+  invActiveWorkspace = 'lumera';
   editingInvId = null;
   invTab = 'edit';
 }
@@ -1144,6 +1230,8 @@ function loadInvoiceForEdit(id){
     invDraft.payments = [{id:'legacy-'+id, date: invDraft.date, amount: invDraft.paidAmount, note:'پرداخت ثبت‌شده قبل از افزودن ریز واریزی‌ها'}];
   }
   if(!Array.isArray(invDraft.payments)) invDraft.payments = [];
+  // فضای کاری فعال رو روی نوع فعالیت اولین ردیف (یا فعالیت قدیمی خود فاکتور) می‌ذاریم تا خالی به‌نظر نرسه
+  invActiveWorkspace = (invDraft.lines[0] && invDraft.lines[0].activityType) || invDraft.activityType || 'lumera';
   editingInvId = id;
   invTab = 'edit';
 }
@@ -1172,6 +1260,16 @@ function ensureCustomerLinked(invDraftObj){
 function saveInvoiceDraft(targetStatus){
   if(!invDraft.customerName.trim() && invDraft.lines.every(l=>!invLineName(l))){
     alert('حداقل نام مشتری یا یک ردیف کالا را وارد کنید'); return;
+  }
+  // اگه تخفیف (چه از فیلد تخفیف، چه از فی توافقی هر ردیف) از سود این فاکتور بیشتر باشه، یعنی داره وارد قیمت
+  // تمام‌شده (ضرر) میشه — اجازه ثبت نمی‌دیم
+  const tCheck = computeInvoiceTotals(invDraft);
+  if(tCheck.profitAfterDiscount<0){
+    const reason = tCheck.discount>0
+      ? 'تخفیف واردشده: ' + fmt(tCheck.discount) + ' تومان'
+      : 'یکی از ردیف‌ها با تخفیف ردیف، پایین‌تر از قیمت تمام‌شده ثبت شده';
+    alert('این فاکتور زیر قیمت تمام‌شده حساب می‌شه و ضرر داره.\nسود این فاکتور قبل از تخفیف: ' + fmt(tCheck.profitBeforeDiscount) + ' تومان\n' + reason + '\nبرای ثبت، تخفیف رو اصلاح کن.');
+    return;
   }
   if(targetStatus==='final' && !invDraft.validTo){
     invDraft.validFrom = invDraft.date;
@@ -1307,7 +1405,7 @@ function renderInvoiceListTab(){
           <span>#${invNumStr(inv.number)} — ${escapeAttr(inv.customerName||'بدون نام')}</span>
           <span class="inv-status ${statusCls}" data-id="${inv.id}" data-act="cycle">${STATUS_LABELS[inv.status]||inv.status}</span>
         </div>
-        <div class="card-sub">${jalaliStr(inv.date)} <span class="badge-activity">${ACTIVITY_LABELS[inv.activityType]||''}</span></div>
+        <div class="card-sub">${jalaliStr(inv.date)} <span class="badge-activity">${invoiceActivityLabelCombined(inv)}</span></div>
         <div style="margin:4px 0">
           <span style="font-size:11px;font-weight:700;color:${PROJECT_STATUS_COLORS[inv.projectStatus]||'#6B7075'};border:1px solid ${PROJECT_STATUS_COLORS[inv.projectStatus]||'#6B7075'};border-radius:6px;padding:2px 8px;display:inline-block">${PROJECT_STATUS_LABELS[inv.projectStatus]||'استعلام'}</span>
         </div>
@@ -1328,6 +1426,21 @@ function renderInvoiceListTab(){
     }).join('')}
   `;
 }
+// نمایش سود قبل/بعد از تخفیف، زیر فیلدهای تخفیف — تا کاربر قبل از ثبت فاکتور بفهمه تخفیف یا فی توافقی وارد سود شده یا نه
+function invoiceProfitHintHTML(t){
+  const unknownCostLines = invDraft.lines.some(l=>!l.productId && invLineName(l) && !((parseFloat(l.customCost)||0)>0));
+  let html = `<p class="note" style="margin:6px 0 0;text-align:right">سود این فاکتور قبل از تخفیف: ${fmt(t.profitBeforeDiscount)} تومان</p>`;
+  const warn = t.profitAfterDiscount < 0;
+  if(t.discount>0){
+    html += `<p class="note" style="margin:2px 0 0;text-align:right;${warn?'color:#C0392B;font-weight:700':''}">سود بعد از تخفیف: ${fmt(t.profitAfterDiscount)} تومان${warn?' — این تخفیف از سود بیشتره!':''}</p>`;
+  } else if(warn){
+    html += `<p class="note" style="margin:2px 0 0;text-align:right;color:#C0392B;font-weight:700">یکی از ردیف‌ها با تخفیف ردیف، زیر قیمت تمام‌شده ثبت شده — این فاکتور ضرر داره!</p>`;
+  }
+  if(unknownCostLines){
+    html += `<p class="note" style="margin:2px 0 0;text-align:right">توجه: بعضی ردیف‌های دلخواه «قیمت تمام‌شده» ندارن، پس سود واقعی ممکنه کمتر از این عدد باشه</p>`;
+  }
+  return html;
+}
 function invoiceSummaryRows(t, prevBalFinal, customerId, excludeId){
   const openInvs = customerOpenInvoices(customerId, excludeId);
   const refStr = openInvs.length>0 ? ' (فاکتور ' + openInvs.map(o=>'#'+invNumStr(o.number)).join('، ') + ')' : '';
@@ -1347,6 +1460,7 @@ function renderInvoiceLineRow(line, idx){
   const options = `<option value="">— محصول دلخواه —</option>` + products.map(p=>`<option value="${p.id}" ${p.id===line.productId?'selected':''}>${escapeAttr(p.name)}</option>`).join('');
   const unit = invLineUnitPrice(line);
   const qty = parseFloat(line.qty)||0;
+  const basePrice = invLineBasePrice(line);
   return `<div class="card" style="margin-bottom:6px" data-line="${idx}">
     <div class="inv-line">
       <select class="invline-product" data-idx="${idx}">${options}</select>
@@ -1356,8 +1470,15 @@ function renderInvoiceLineRow(line, idx){
     ${!line.productId ? `
     <div class="row-flex">
       <input class="invline-customname lt" data-idx="${idx}" placeholder="نام کالا/خدمت" value="${escapeAttr(line.customName)}">
-      <input inputmode="decimal" class="invline-customprice" data-idx="${idx}" style="width:110px" placeholder="قیمت واحد (تومان)" value="${escapeAttr(line.customPrice)}">
-    </div>` : ''}
+      <input inputmode="decimal" class="invline-customprice" data-idx="${idx}" style="width:110px" placeholder="فی/قیمت پایه (تومان)" value="${escapeAttr(line.customPrice)}">
+    </div>
+    <div class="row-flex">
+      <input inputmode="decimal" class="invline-customcost" data-idx="${idx}" placeholder="قیمت تمام‌شده این ردیف (اختیاری)" value="${escapeAttr(line.customCost)}">
+    </div>
+    <p class="note" style="margin:2px 0 0;text-align:right">اگه قیمت تمام‌شده رو خالی بذاری، کل مبلغ این ردیف سود حساب می‌شه</p>` : ''}
+    <div class="row-flex">
+      <input inputmode="decimal" class="invline-linediscount" data-idx="${idx}" placeholder="تخفیف این ردیف (اختیاری)${basePrice>0?' — فی: '+fmt(basePrice)+' تومان':''}" value="${escapeAttr(line.lineDiscount)}">
+    </div>
     <div class="card-sub line-total-${idx}" style="margin-top:4px">جمع ردیف: ${fmt(unit*qty)} تومان</div>
   </div>`;
 }
@@ -1387,14 +1508,6 @@ function renderInvoiceEditTab(){
       <label class="small">شماره فاکتور:</label>
       <input id="invNumberInput" type="text" inputmode="numeric" value="${escapeAttr(invDraft.number!=null? invDraft.number : invoiceSeq)}" style="flex:1;font-weight:700">
     </div>
-    <div class="row-flex" style="margin-bottom:6px">
-      <label class="small">فعالیت:</label>
-      <select id="invActivityType" style="flex:1">
-        <option value="lumera" ${invDraft.activityType==='lumera'?'selected':''}>ساخت LUMERA</option>
-        <option value="drafting" ${invDraft.activityType==='drafting'?'selected':''}>نقشه‌کشی</option>
-        <option value="graphic" ${invDraft.activityType==='graphic'?'selected':''}>طراحی لوگو و گرافیک</option>
-      </select>
-    </div>
     <div class="box-gray">
       <select id="invCustomerSelect" style="margin-bottom:8px">
         <option value="">— بدون اتصال به حساب مشتری —</option>
@@ -1420,8 +1533,14 @@ function renderInvoiceEditTab(){
       </div>
     </div>
     <h2 class="sec">اقلام فاکتور</h2>
-    <div id="invLinesWrap">${invDraft.lines.map((l,i)=>renderInvoiceLineRow(l,i)).join('')}</div>
-    <button id="invAddLineBtn" class="btn btn-outline" style="width:100%;margin-bottom:12px">+ افزودن ردیف</button>
+    <p class="note" style="margin:0 0 6px;text-align:right">می‌تونی توی یه فاکتور از چند فضای کاری استفاده کنی — هر فضا ردیف‌ها و شرایط و ضوابط خودش رو توی خروجی چاپی جدا نشون می‌ده</p>
+    <div class="mode-toggle" style="margin-bottom:8px">
+      <button class="btn ${invActiveWorkspace==='lumera'?'btn-black':'btn-outline'} invws-btn" data-ws="lumera" style="font-size:11px;padding:6px 4px;min-height:32px">ساخت LUMERA${invoiceWorkspaceCount(invDraft,'lumera')>0?' ('+invoiceWorkspaceCount(invDraft,'lumera')+')':''}</button>
+      <button class="btn ${invActiveWorkspace==='drafting'?'btn-black':'btn-outline'} invws-btn" data-ws="drafting" style="font-size:11px;padding:6px 4px;min-height:32px">نقشه‌کشی${invoiceWorkspaceCount(invDraft,'drafting')>0?' ('+invoiceWorkspaceCount(invDraft,'drafting')+')':''}</button>
+      <button class="btn ${invActiveWorkspace==='graphic'?'btn-black':'btn-outline'} invws-btn" data-ws="graphic" style="font-size:11px;padding:6px 4px;min-height:32px">طراحی و گرافیک${invoiceWorkspaceCount(invDraft,'graphic')>0?' ('+invoiceWorkspaceCount(invDraft,'graphic')+')':''}</button>
+    </div>
+    <div id="invLinesWrap">${invDraft.lines.map((l,i)=>({l,i})).filter(x=>(x.l.activityType||invDraft.activityType||'lumera')===invActiveWorkspace).map(x=>renderInvoiceLineRow(x.l,x.i)).join('') || `<p class="note" style="margin:0 0 8px">هنوز ردیفی توی این فضای کاری نیست</p>`}</div>
+    <button id="invAddLineBtn" class="btn btn-outline" style="width:100%;margin-bottom:12px">+ افزودن ردیف به همین فضای کاری</button>
 
     <h2 class="sec">مانده/بدهی قبلی مشتری</h2>
     <div class="box-gray" style="margin-bottom:12px">
@@ -1445,6 +1564,7 @@ function renderInvoiceEditTab(){
       <input inputmode="decimal" id="invDiscountPct" placeholder="تخفیف ٪" value="${escapeAttr(invDraft.discountPct)}" style="flex:1">
       <input inputmode="decimal" id="invDiscountAmount" placeholder="تخفیف (تومان)" value="${escapeAttr(invDraft.discountAmount)}" style="flex:1">
     </div>
+    <div id="invProfitHint">${invoiceProfitHintHTML(t)}</div>
 
     <h2 class="sec">واریزی‌ها</h2>
     <div id="invPaymentsWrap">${(invDraft.payments||[]).map((p,i)=>renderInvoicePaymentRow(p,i)).join('') || `<p class="note" style="margin-top:0">هنوز واریزی‌ای برای این فاکتور ثبت نشده</p>`}</div>
@@ -1454,7 +1574,7 @@ function renderInvoiceEditTab(){
       ${invoiceSummaryRows(t, prevBalFinal, invDraft.customerId, editingInvId)}
     </div>
 
-    <input id="invNotes" placeholder="یادداشت (اختیاری — در خروجی چاپی هم نمایش داده می‌شود)" value="${escapeAttr(invDraft.notes)}" style="margin-bottom:12px">
+    <textarea id="invNotes" rows="3" placeholder="یادداشت (اختیاری — در خروجی چاپی هم نمایش داده می‌شود؛ هر خط جدا نوشته می‌شه)" style="width:100%;font-family:inherit;border:1px solid #ccc;border-radius:6px;padding:8px;margin-bottom:12px">${escapeAttr(invDraft.notes)}</textarea>
 
     <div class="box-gray" style="margin-bottom:12px">
       <label class="small" style="display:block;margin-bottom:5px">وضعیت پروژه</label>
@@ -1519,7 +1639,6 @@ function bindInvoiceListEvents(){
   });
 }
 function bindInvoiceEditEvents(){
-  document.getElementById('invActivityType')?.addEventListener('change', e=>{ invDraft.activityType = e.target.value; });
   document.getElementById('invCustomerSelect')?.addEventListener('change', e=>{
     const c = customers.find(x=>x.id===e.target.value);
     invDraft.customerId = e.target.value || '';
@@ -1564,6 +1683,9 @@ function bindInvoiceEditEvents(){
   document.getElementById('invProjectStatus')?.addEventListener('change', e=>{ invDraft.projectStatus = e.target.value; });
   bindJalaliDateInput('invDeliveryDueDate', iso=>{ invDraft.deliveryDueDate = iso; });
   document.getElementById('invProjectNote')?.addEventListener('input', e=>{ invDraft.projectNote = e.target.value; });
+  document.querySelectorAll('.invws-btn').forEach(el=>{
+    el.addEventListener('click', e=>{ invActiveWorkspace = e.currentTarget.dataset.ws; render(); });
+  });
   document.getElementById('invAddLineBtn')?.addEventListener('click', ()=>{ invDraft.lines.push(blankInvoiceLine()); render(); });
   document.getElementById('invSaveDraftBtn')?.addEventListener('click', ()=>saveInvoiceDraft('draft'));
   document.getElementById('invSaveFinalBtn')?.addEventListener('click', ()=>saveInvoiceDraft('final'));
@@ -1589,6 +1711,12 @@ function bindInvoiceEditEvents(){
   document.querySelectorAll('.invline-customprice').forEach(el=>{
     el.addEventListener('input', e=>{ invDraft.lines[+e.target.dataset.idx].customPrice = e.target.value; rerenderInvoiceEdit(); });
   });
+  document.querySelectorAll('.invline-customcost').forEach(el=>{
+    el.addEventListener('input', e=>{ invDraft.lines[+e.target.dataset.idx].customCost = e.target.value; rerenderInvoiceEdit(); });
+  });
+  document.querySelectorAll('.invline-linediscount').forEach(el=>{
+    el.addEventListener('input', e=>{ invDraft.lines[+e.target.dataset.idx].lineDiscount = e.target.value; rerenderInvoiceEdit(); });
+  });
   document.querySelectorAll('.invline-remove').forEach(el=>{
     el.addEventListener('click', e=>{
       const idx = +e.currentTarget.dataset.idx;
@@ -1613,6 +1741,10 @@ function rerenderInvoiceEdit(){
   if(resultsEl){
     resultsEl.innerHTML = invoiceSummaryRows(t, prevBalFinal, invDraft.customerId, editingInvId);
   }
+  const profitHintEl = document.getElementById('invProfitHint');
+  if(profitHintEl){
+    profitHintEl.innerHTML = invoiceProfitHintHTML(t);
+  }
 }
 
 /* ---------- INVOICE JPG EXPORT (طرح کامل A4) ---------- */
@@ -1624,18 +1756,29 @@ function buildA4InvoiceHTML(inv){
   const t = computeInvoiceTotals(inv);
   const prevBal = invoicePrevBalanceFinal(inv);
   const logoSrc = document.getElementById('lumeraLogoSrc')?.src || '';
-  const rows = inv.lines.map((l,i)=>{
-    const name = invLineName(l) || '—';
-    const unit = invLineUnitPrice(l);
-    const qty = parseQty(l.qty);
-    return `<tr>
-      <td class="a4-row-num a4-col-num">${persianRowNum(i+1)}</td>
-      <td class="a4-col-desc">${escapeAttr(name)}</td>
-      <td class="a4-col-mat">${ACTIVITY_LABELS[inv.activityType]||''}</td>
-      <td class="a4-col-qty">${escapeAttr(String(l.qty||''))}</td>
-      <td class="a4-col-unit">${fmt(unit)}</td>
-      <td class="a4-col-total">${fmt(unit*qty)}</td>
-    </tr>`;
+  const typesUsed = invoiceActivityTypesUsed(inv);
+  const multiType = typesUsed.length>1;
+  // ردیف‌ها رو بر اساس فضای کاری گروه‌بندی می‌کنیم (نه ترتیب ورود) تا توی فاکتور چاپی قاطی نشن؛
+  // اگه بیشتر از یک نوع فعالیت وجود داشته باشه، قبل از هر گروه یک ردیف عنوان اضافه می‌شه
+  let rowNum = 0;
+  const rows = typesUsed.map(type=>{
+    const linesOfType = inv.lines.filter(l=>(l.activityType||inv.activityType||'lumera')===type);
+    const header = multiType ? `<tr class="a4-group-row"><td colspan="6">${ACTIVITY_LABELS[type]||''}</td></tr>` : '';
+    const body = linesOfType.map(l=>{
+      const name = invLineName(l) || '—';
+      const unit = invLineUnitPrice(l);
+      const qty = parseQty(l.qty);
+      rowNum++;
+      return `<tr>
+        <td class="a4-row-num a4-col-num">${persianRowNum(rowNum)}</td>
+        <td class="a4-col-desc">${escapeAttr(name)}</td>
+        <td class="a4-col-mat">${ACTIVITY_LABELS[type]||''}</td>
+        <td class="a4-col-qty">${escapeAttr(String(l.qty||''))}</td>
+        <td class="a4-col-unit">${fmt(unit)}</td>
+        <td class="a4-col-total">${fmt(unit*qty)}</td>
+      </tr>`;
+    }).join('');
+    return header + body;
   }).join('');
   return `
   <div class="a4-wrap">
@@ -1659,7 +1802,7 @@ function buildA4InvoiceHTML(inv){
       </div>
       <div class="a4-grid a4-meta-grid">
         <div class="a4-cell"><span class="a4-cell-label">کد پروژه</span><span class="a4-cell-value">${projectCodeDisplay(inv.projectCode)}</span></div>
-        <div class="a4-cell"><span class="a4-cell-label">نوع فعالیت</span><span class="a4-cell-value">${ACTIVITY_LABELS[inv.activityType]||'-'}</span></div>
+        <div class="a4-cell"><span class="a4-cell-label">نوع فعالیت</span><span class="a4-cell-value">${invoiceActivityLabelCombined(inv)||'-'}</span></div>
         <div class="a4-cell"><span class="a4-cell-label">شماره فاکتور</span><span class="a4-cell-value">${invNumStr(inv.number)}</span></div>
         <div class="a4-cell"><span class="a4-cell-label">اعتبار از</span><span class="a4-cell-value">${jalaliStr(inv.validFrom)||'-'}</span></div>
         <div class="a4-cell"><span class="a4-cell-label">اعتبار تا</span><span class="a4-cell-value">${jalaliStr(inv.validTo)||'-'}</span></div>
@@ -1675,11 +1818,8 @@ function buildA4InvoiceHTML(inv){
       <div class="a4-bottom-grid">
         <div class="a4-terms-box">
           <div class="a4-terms-title">شرایط و ضوابط</div>
-          <ul class="a4-terms-list">
-            ${(ACTIVITY_TERMS[inv.activityType]||ACTIVITY_TERMS.lumera).map(t=>`<li>${t}</li>`).join('')}
-            ${FINANCIAL_TERMS_COMMON.map(t=>`<li class="important">${t}</li>`).join('')}
-            ${inv.notes ? `<li class="important">${escapeAttr(inv.notes)}</li>` : ''}
-          </ul>
+          ${buildTermsSectionsHTML(typesUsed)}
+          ${invoiceNotesHTML(inv)}
           <div class="a4-bank-box">
             <div class="a4-terms-title" style="margin-top:10px">اطلاعات واریز</div>
             <div style="font-size:9.5px;color:#000;line-height:1.8">
@@ -2883,15 +3023,27 @@ function periodRange(period, refDateStr){
   return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
 }
 
+// درآمد نهایی (بعد از تخفیف) این فاکتور رو بر اساس سهم هر فضای کاری از جمع ردیف‌ها تقسیم می‌کنه —
+// برای فاکتورهای تک‌نوع همون مبلغ کامل به همون نوع می‌ره؛ برای چند‌نوع، تخفیف به نسبت بین‌شون پخش می‌شه
+function invoiceRevenueByActivity(inv){
+  const t = computeInvoiceTotals(inv);
+  const result = {lumera:0, drafting:0, graphic:0};
+  const scale = t.linesTotal>0 ? (t.grandTotal / t.linesTotal) : 0;
+  inv.lines.forEach(l=>{
+    const type = l.activityType || inv.activityType || 'lumera';
+    const lineRevenue = invLineUnitPrice(l)*parseQty(l.qty);
+    if(result[type]===undefined) result[type]=0;
+    result[type] += lineRevenue*scale;
+  });
+  return result;
+}
 function reportData(period){
   const {start, end} = periodRange(period);
   const counted = invoices.filter(inv=> (inv.status==='final' || inv.status==='paid') && inv.date>=start && inv.date<=end);
   let lumera = 0, drafting = 0, graphic = 0;
   counted.forEach(inv=>{
-    const t = computeInvoiceTotals(inv);
-    if(inv.activityType==='drafting') drafting += t.grandTotal;
-    else if(inv.activityType==='graphic') graphic += t.grandTotal;
-    else lumera += t.grandTotal;
+    const r = invoiceRevenueByActivity(inv);
+    lumera += r.lumera; drafting += r.drafting; graphic += r.graphic;
   });
   return { lumera, drafting, graphic, total: lumera+drafting+graphic, count: counted.length, start, end };
 }
@@ -2973,10 +3125,8 @@ function dashboardStats(){
   const todayS = todayStr();
   let lumera=0, drafting=0, graphic=0;
   invoices.filter(i=> (i.status==='final'||i.status==='paid') && i.date>=monthStart && i.date<=todayS).forEach(inv=>{
-    const t = computeInvoiceTotals(inv);
-    if(inv.activityType==='drafting') drafting += t.grandTotal;
-    else if(inv.activityType==='graphic') graphic += t.grandTotal;
-    else lumera += t.grandTotal;
+    const r = invoiceRevenueByActivity(inv);
+    lumera += r.lumera; drafting += r.drafting; graphic += r.graphic;
   });
   return { activeProjects, openDrafts, custDebt, custCredit, lumera, drafting, graphic };
 }
