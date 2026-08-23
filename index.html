@@ -70,6 +70,9 @@
   body{font-family:var(--font-fa);background:radial-gradient(ellipse 900px 500px at 15% -5%, rgba(255,255,255,0.9), transparent 60%), radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255,255,255,0.5), transparent 55%), var(--c-bg);background-attachment:fixed;color:var(--c-ink);margin:0;padding:0;-webkit-font-smoothing:antialiased;}
   .wrap{max-width:480px;margin:0 auto;padding:var(--sp-4);}
   @keyframes lumeraFadeIn{from{opacity:0;transform:translateY(8px) scale(0.99);}to{opacity:1;transform:translateY(0) scale(1);}}
+  /* حذف نرم یک ردیف (اقلام فاکتور، مواد، دستمزد) — به‌جای ناپدید شدن ناگهانی، محو و جمع می‌شه */
+  [data-line],[data-item],[data-labor]{transition:opacity .18s ease,transform .18s ease,max-height .2s ease,margin .18s ease;}
+  .row-removing{opacity:0!important;transform:scale(0.96)!important;max-height:0!important;margin:0!important;overflow:hidden;pointer-events:none;}
   #tabContent{animation:lumeraFadeIn 320ms var(--ease);}
   @media (prefers-reduced-motion:reduce){ #tabContent{animation:none;} }
   h1{font-size:var(--fs-h1);font-weight:var(--fw-bold);letter-spacing:-0.01em;margin:0 0 2px;color:var(--c-ink);}
@@ -315,8 +318,12 @@
   .a4-table tbody td:last-child{border-left:none;}
   .a4-table tbody td.a4-col-desc{text-align:right;padding-right:10px;}
   .a4-row-num{font-size:9.5px;color:#C0C0C0;}
-  .a4-bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;flex:1;}
+  .a4-bottom-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px;flex:1;}
   .a4-terms-box{background:#F7F7F7;border-radius:12px;padding:12px 14px;}
+  .a4-terms-columns{display:flex;gap:16px;}
+  .a4-terms-col{flex:1;min-width:0;}
+  .a4-terms-col:not(:last-child){border-left:1px solid #E3E3E3;padding-left:16px;margin-left:-16px;}
+  .a4-finance-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .a4-terms-title{font-size:10.5px;font-weight:700;color:#2F3338;margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--c-accent);display:inline-block;}
   .a4-terms-subtitle{font-size:9.5px;font-weight:700;color:#6B7075;margin:8px 0 4px;}
   .a4-terms-subtitle:first-of-type{margin-top:0;}
@@ -765,7 +772,7 @@ function renderItemsRows(){
   return calc.items.map((it, idx)=>{
     const mat = materials.find(m=>m.id===it.materialId);
     const options = materials.map(m=>`<option value="${m.id}" ${m.id===it.materialId?'selected':''}>${escapeAttr(m.name)}</option>`).join('');
-    return `<div class="row-flex">
+    return `<div class="row-flex" data-item="${idx}">
       <select class="item-material" data-idx="${idx}" style="flex:1">${options}</select>
       <input type="text" inputmode="decimal" class="item-qty" data-idx="${idx}" style="width:80px" placeholder="${mat?mat.unit:'مقدار'}" value="${escapeAttr(it.qty)}">
       <button class="btn-icon item-remove" data-idx="${idx}">×</button>
@@ -777,7 +784,7 @@ function renderLaborRows(){
     if(l.calcType==='laser'){
       const cost = laborItemCost(l);
       return `
-      <div class="box-gray" style="margin-bottom:8px">
+      <div class="box-gray" style="margin-bottom:8px" data-labor="${idx}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <input class="labor-name" data-idx="${idx}" style="flex:1;font-weight:700" placeholder="نام هزینه" value="${escapeAttr(l.name)}">
           <button class="btn-icon labor-remove" data-idx="${idx}">×</button>
@@ -793,7 +800,7 @@ function renderLaborRows(){
       </div>`;
     }
     return `
-    <div class="row-flex">
+    <div class="row-flex" data-labor="${idx}">
       <input class="labor-name" data-idx="${idx}" style="flex:1" placeholder="نام هزینه" value="${escapeAttr(l.name)}">
       <input type="text" inputmode="decimal" class="labor-cost" data-idx="${idx}" style="width:100px" placeholder="تومان" value="${escapeAttr(l.cost)}">
       <button class="btn-icon labor-remove" data-idx="${idx}">×</button>
@@ -933,8 +940,12 @@ function bindCalcEvents(){
   });
   document.querySelectorAll('.item-remove').forEach(el=>{
     el.addEventListener('click', e=>{
-      calc.items.splice(+e.currentTarget.dataset.idx,1);
-      render();
+      const idx = +e.currentTarget.dataset.idx;
+      const rowEl = e.currentTarget.closest('[data-item]');
+      animateAndRemoveRow(rowEl, ()=>{
+        calc.items.splice(idx,1);
+        render();
+      });
     });
   });
   document.querySelectorAll('.labor-preset').forEach(el=>{
@@ -983,8 +994,12 @@ function bindCalcEvents(){
   });
   document.querySelectorAll('.labor-remove').forEach(el=>{
     el.addEventListener('click', e=>{
-      calc.laborItems.splice(+e.currentTarget.dataset.idx,1);
-      render();
+      const idx = +e.currentTarget.dataset.idx;
+      const rowEl = e.currentTarget.closest('[data-labor]');
+      animateAndRemoveRow(rowEl, ()=>{
+        calc.laborItems.splice(idx,1);
+        render();
+      });
     });
   });
   document.getElementById('modeMargin')?.addEventListener('click', ()=>{ calc.pricingMode='margin'; render(); });
@@ -1045,22 +1060,22 @@ function invoiceActivityLabelCombined(inv){
 // ضوابط مخصوص هر نوع فعالیت — این‌ها جدا از هم هستن، نقشه‌کشی و گرافیک ضوابط ساخت رو به ارث نمی‌برن
 const ACTIVITY_TERMS = {
   lumera: [
-    'قیمت‌ها بر اساس نرخ روز مواد اولیه — در صورت تغییر قیمت بازار، مبلغ نهایی قابل بازنگری است.',
-    'زمان تحویل ۱۰ روز کاری پس از دریافت بیعانه.',
-    'هرگونه تغییرات پس از تأیید طرح شامل هزینه مجدد می‌باشد.',
-    'تحویل درب کارگاه — ارسال با باربری هزینه به عهده مشتری.',
-    'ضمانت ۶ ماهه جوش، شامل اصلاح جزئی در صورت ایراد ساخت.',
+    'قیمت‌ها بر اساس نرخ روز مواد است؛ با تغییر بازار قابل بازنگری.',
+    'تحویل: ۱۰ روز کاری پس از دریافت بیعانه.',
+    'تغییرات پس از تأیید طرح، هزینه مجدد دارد.',
+    'تحویل درب کارگاه؛ هزینه باربری با مشتری.',
+    'ضمانت ۶ ماهه جوش، شامل اصلاح جزئی ایراد ساخت.',
   ],
   drafting: [
-    'نقشه بر اساس اطلاعات و ابعاد ارائه‌شده توسط مشتری تهیه می‌شود.',
-    'زمان تحویل نقشه ۳ روز کاری پس از دریافت بیعانه.',
-    'هرگونه اصلاح خارج از طرح اولیه، شامل هزینه مجدد می‌باشد.',
-    'مسئولیت صحت اجرای نقشه در کارگاه دیگر، بر عهده مجری آن کارگاه است.',
+    'نقشه بر اساس اطلاعات و ابعاد ارائه‌شده مشتری تهیه می‌شود.',
+    'تحویل: ۳ روز کاری پس از دریافت بیعانه.',
+    'اصلاح خارج از طرح اولیه، هزینه مجدد دارد.',
+    'اجرای نقشه در کارگاه دیگر، مسئولیت همان کارگاه است.',
   ],
   graphic: [
-    'طراحی بر اساس بریف و سلیقه اعلام‌شده توسط مشتری انجام می‌شود.',
-    'شامل حداکثر ۲ مرحله بازبینی (ریویو) رایگان؛ بازبینی‌های بیشتر هزینه جداگانه دارد.',
-    'زمان تحویل طرح اولیه ۵ روز کاری پس از دریافت بیعانه.',
+    'طراحی بر اساس بریف و سلیقه اعلام‌شده مشتری انجام می‌شود.',
+    'شامل حداکثر ۲ ریویو رایگان؛ بیشتر، هزینه جدا دارد.',
+    'تحویل طرح اولیه: ۵ روز کاری پس از بیعانه.',
   ],
 };
 // نکته: قانون «فایل/محصول نهایی فقط پس از تسویه کامل تحویل داده می‌شود» توی FINANCIAL_TERMS_COMMON
@@ -1068,21 +1083,26 @@ const ACTIVITY_TERMS = {
 // جداگانه تکرار شده بود که حذف شد تا در فاکتور دوبار نیاد.
 // قوانین مالی — این‌ها ثابت‌اند و برای هر نوع فعالیتی یکسان اعمال می‌شوند
 const FINANCIAL_TERMS_COMMON = [
-  'شروع هرگونه کار منوط به دریافت پیش‌پرداخت (بیعانه) است.',
-  'فایل یا محصول نهایی تنها پس از تسویه کامل هزینه تحویل داده می‌شود.',
+  'شروع کار منوط به دریافت بیعانه است.',
+  'فایل/محصول نهایی فقط پس از تسویه کامل تحویل می‌شود.',
 ];
-// شرایط و ضوابط رو برای فاکتورهای چند-فضای‌کاری، جدا جدا زیر عنوان هر فضای کاری نشون می‌ده تا با هم قاطی نشن؛
-// برای فاکتور تک‌نوع (اکثر فاکتورها)، فقط لیست همون یک نوع رو بدون عنوان جداگانه نشون می‌ده (مثل قبل)
+// شرایط و ضوابط رو برای فاکتورهای چند-فضای‌کاری، توی چند ستون کنار هم (زیر عنوان هر فضای کاری) نشون می‌ده —
+// هم از هم جدا می‌مونن، هم فاکتور به‌جای طولانی‌شدن به سمت پایین، بلندیش کنترل‌شده می‌مونه؛
+// برای فاکتور تک‌نوع (اکثر فاکتورها)، فقط لیست همون یک نوع رو تک‌ستونه نشون می‌ده (مثل قبل)
 function buildTermsSectionsHTML(typesUsed){
   const types = typesUsed.length>0 ? typesUsed : ['lumera'];
   let html = '';
   if(types.length===1){
     html += `<ul class="a4-terms-list">${(ACTIVITY_TERMS[types[0]]||ACTIVITY_TERMS.lumera).map(t=>`<li>${t}</li>`).join('')}</ul>`;
   } else {
+    html += `<div class="a4-terms-columns">`;
     types.forEach(type=>{
-      html += `<div class="a4-terms-subtitle">${ACTIVITY_LABELS[type]||''}</div>`;
-      html += `<ul class="a4-terms-list">${(ACTIVITY_TERMS[type]||[]).map(t=>`<li>${t}</li>`).join('')}</ul>`;
+      html += `<div class="a4-terms-col">
+        <div class="a4-terms-subtitle">${ACTIVITY_LABELS[type]||''}</div>
+        <ul class="a4-terms-list">${(ACTIVITY_TERMS[type]||[]).map(t=>`<li>${t}</li>`).join('')}</ul>
+      </div>`;
     });
+    html += `</div>`;
   }
   html += `<ul class="a4-terms-list">${FINANCIAL_TERMS_COMMON.map(t=>`<li class="important">${t}</li>`).join('')}</ul>`;
   return html;
@@ -1190,9 +1210,12 @@ function computeInvoiceTotals(inv){
 
 // مانده/بدهی قبلی مشتری — مستقل از همین فاکتور، یعنی مانده‌ای که از قبل (فاکتورهای پیشین + واریزی‌ها) باقی مانده
 // مثبت = مشتری بدهکار است (باید به ما بدهد) | منفی = مشتری بستانکار است (ما به او بدهکاریم)
-function invoicePrevBalanceAuto(inv){
+// getBalance اختیاریه: توی لیست فاکتورها، نسخه‌ی حافظه‌دار customerBalanceMemoized پاس داده می‌شه تا برای
+// مشتری‌های تکراری، حساب مانده از اول انجام نشه (روی لیست‌های بلند، تفاوت سرعت محسوسه)
+function invoicePrevBalanceAuto(inv, getBalance){
   if(!inv.customerId) return 0;
-  const bal = customerBalance(inv.customerId); // net>0 یعنی بستانکار، net<0 یعنی بدهکار
+  const balanceFn = getBalance || customerBalance;
+  const bal = balanceFn(inv.customerId); // net>0 یعنی بستانکار، net<0 یعنی بدهکار
   let net = bal.net;
   // اگر همین فاکتور قبلاً ذخیره شده و در حالت final/paid است، مانده‌ی خودش را از حساب کلی مشتری کم می‌کنیم
   // تا «بدهی قبلی» فقط شامل فاکتورهای دیگر باشد، نه خود این فاکتور
@@ -1208,9 +1231,9 @@ function invoicePrevBalanceAuto(inv){
   }
   return -net; // برگرداندن به فرم «بدهکاری مثبت»
 }
-function invoicePrevBalanceFinal(inv){
+function invoicePrevBalanceFinal(inv, getBalance){
   if(inv.prevBalanceUseManual) return parseFloat(inv.prevBalanceManual)||0;
-  return invoicePrevBalanceAuto(inv);
+  return invoicePrevBalanceAuto(inv, getBalance);
 }
 
 function newInvoiceFromDraft(){
@@ -1321,6 +1344,9 @@ function cycleInvoiceStatusInList(id){
 /* ---------- INVOICE TAB RENDER ---------- */
 let invSearchQuery = '';
 let invSearchDebounceTimer = null;
+// تعداد فاکتورهایی که فعلاً توی لیست نشون داده می‌شن — برای اینکه لیست فاکتورهای زیاد (بعد از ماه‌ها کارکردن)
+// کل صفحه رو کند نکنه؛ با دکمه‌ی «نمایش بیشتر» زیاد می‌شه
+let invListVisibleCount = 30;
 function renderBankInfoSettings(){
   const isOpen = bankInfoEditorOpen;
   return `
@@ -1381,13 +1407,18 @@ function renderInvoiceListTab(){
            numStr.includes(q) || numRaw.includes(q) ||
            dateG.includes(q) || dateJ.includes(q) || pStatus.includes(q) || status.includes(q);
   }).sort((a,b)=> (b.number||0)-(a.number||0)); // جدیدترین فاکتور (بیشترین شماره) همیشه بالای لیست
+  // فقط تا سقف invListVisibleCount کارت واقعاً ساخته و محاسبه می‌شن؛ محاسبه‌ی مانده‌حساب هر فاکتور (که خودش
+  // باید حساب کل فاکتورهای همون مشتری رو بررسی کنه) گرون‌ترین بخش این صفحه‌ست، پس محدودش می‌کنیم
+  const visible = filtered.slice(0, invListVisibleCount);
+  const balCache = new Map();
+  const getBalance = customerBalanceMemoized(balCache);
   return `
     ${renderBankInfoSettings()}
     <button id="newInvBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ فاکتور جدید</button>
     <input id="invSearchInput" placeholder="🔍 جستجو: شماره فاکتور، نام/تلفن مشتری، کد پروژه، تاریخ یا وضعیت" value="${escapeAttr(invSearchQuery)}" style="width:100%;margin-bottom:10px;border:1.5px solid #000">
-    ${filtered.length===0? '<p class="empty">نتیجه‌ای پیدا نشد</p>' : filtered.map(inv=>{
+    ${filtered.length===0? '<p class="empty">نتیجه‌ای پیدا نشد</p>' : visible.map(inv=>{
       const t = computeInvoiceTotals(inv);
-      const prevBal = invoicePrevBalanceFinal(inv);
+      const prevBal = invoicePrevBalanceFinal(inv, getBalance);
       const statusCls = inv.status==='final'?'final':(inv.status==='paid'?'paid':(inv.status==='cancelled'?'cancelled':'draft'));
       const balLine = t.balance>0 ? `<span style="color:var(--red);font-weight:700">مانده: ${fmt(t.balance)} ت</span>`
         : (t.overpaid>0 ? `<span style="color:#1A7A3A;font-weight:700">اضافه‌پرداخت: ${fmt(t.overpaid)} ت</span>`
@@ -1424,6 +1455,7 @@ function renderInvoiceListTab(){
         </div>
       </div>`;
     }).join('')}
+    ${filtered.length>visible.length? `<button id="invLoadMoreBtn" class="btn btn-outline" style="width:100%;margin-top:6px">نمایش ۳۰ فاکتور بعدی (${filtered.length-visible.length} فاکتور دیگر مونده)</button>` : ''}
   `;
 }
 // نمایش سود قبل/بعد از تخفیف، زیر فیلدهای تخفیف — تا کاربر قبل از ثبت فاکتور بفهمه تخفیف یا فی توافقی وارد سود شده یا نه
@@ -1608,12 +1640,17 @@ function bindInvoiceListEvents(){
       clearTimeout(invSearchDebounceTimer);
       invSearchDebounceTimer = setTimeout(()=>{
         invSearchQuery = val;
+        invListVisibleCount = 30; // با تغییر جستجو، لیست از اول (۳۰ تای اول نتیجه‌ی جدید) نشون داده بشه
         render();
         const again = document.getElementById('invSearchInput');
         if(again){ again.focus(); again.setSelectionRange(pos,pos); }
       }, 150);
     });
   }
+  document.getElementById('invLoadMoreBtn')?.addEventListener('click', ()=>{
+    invListVisibleCount += 30;
+    render();
+  });
   document.querySelectorAll('.inv-edit').forEach(el=>{
     el.addEventListener('click', e=>{ loadInvoiceForEdit(e.currentTarget.dataset.id); render(); });
   });
@@ -1720,9 +1757,12 @@ function bindInvoiceEditEvents(){
   document.querySelectorAll('.invline-remove').forEach(el=>{
     el.addEventListener('click', e=>{
       const idx = +e.currentTarget.dataset.idx;
-      invDraft.lines.splice(idx,1);
-      if(invDraft.lines.length===0) invDraft.lines.push(blankInvoiceLine());
-      render();
+      const rowEl = e.currentTarget.closest('[data-line]');
+      animateAndRemoveRow(rowEl, ()=>{
+        invDraft.lines.splice(idx,1);
+        if(invDraft.lines.length===0) invDraft.lines.push(blankInvoiceLine());
+        render();
+      });
     });
   });
 }
@@ -1823,13 +1863,11 @@ function buildA4InvoiceHTML(inv){
           <div class="a4-bank-box">
             <div class="a4-terms-title" style="margin-top:10px">اطلاعات واریز</div>
             <div style="font-size:9.5px;color:#000;line-height:1.8">
-              بانک: ${escapeAttr(bankInfo.bankName) || '—'}<br>
-              به نام: ${escapeAttr(bankInfo.accountHolder) || '—'}<br>
-              شماره کارت: ${escapeAttr(bankInfo.cardNumber) || '—'}<br>
-              شماره شبا: ${escapeAttr(bankInfo.iban) || '—'}
+              بانک: ${escapeAttr(bankInfo.bankName) || '—'}&nbsp;&nbsp;|&nbsp;&nbsp;به نام: ${escapeAttr(bankInfo.accountHolder) || '—'}&nbsp;&nbsp;|&nbsp;&nbsp;شماره کارت: ${escapeAttr(bankInfo.cardNumber) || '—'}&nbsp;&nbsp;|&nbsp;&nbsp;شبا: ${escapeAttr(bankInfo.iban) || '—'}
             </div>
           </div>
         </div>
+        <div class="a4-finance-row">
         <div class="a4-summary-box">
           <div class="a4-summary-card">
             <div class="a4-summary-row"><span class="a4-sr-label">جمع فاکتور</span><span class="a4-sr-value">${fmt(t.linesTotal)}</span></div>
@@ -1837,6 +1875,8 @@ function buildA4InvoiceHTML(inv){
             <div class="a4-summary-row total"><span class="a4-sr-label">مبلغ قابل پرداخت این فاکتور</span><span class="a4-sr-value">${fmt(t.grandTotal)}</span></div>
             <div class="a4-amount-words">${escapeAttr(amountToWordsToman(t.grandTotal))}</div>
           </div>
+        </div>
+        <div class="a4-summary-box">
           <div class="a4-payment-card">
             <div class="a4-payment-title">وضعیت پرداخت</div>
             ${prevBal!==0 ? (()=>{
@@ -1857,6 +1897,7 @@ function buildA4InvoiceHTML(inv){
             })()}
             ${(inv.prevBalanceNote||'').trim() ? `<div class="a4-prev-note">${escapeAttr(inv.prevBalanceNote)}</div>` : ''}
           </div>
+        </div>
         </div>
       </div>
       <div class="a4-footer">
@@ -2279,10 +2320,26 @@ function customerBalance(customerId){
   // بدهکاری = جمع مانده فاکتورهای صادرشده/تسویه‌شده متصل به این مشتری
   // بستانکاری = جمع واریزی‌های آزاد ثبت‌شده + جمع اضافه‌پرداخت‌های فاکتورها (پولی که مشتری بیشتر از فاکتور داده)
   const linkedInvoices = invoices.filter(i=>i.customerId===customerId && i.status!=='draft' && i.status!=='cancelled');
-  const debit = linkedInvoices.reduce((s,inv)=>{ const t=computeInvoiceTotals(inv); return s + t.balance; }, 0);
-  const overpaidTotal = linkedInvoices.reduce((s,inv)=>{ const t=computeInvoiceTotals(inv); return s + t.overpaid; }, 0);
+  // قبلاً computeInvoiceTotals برای هر فاکتور دوبار صدا زده می‌شد (یک بار برای debit، یک بار برای overpaidTotal)؛
+  // یک‌بار محاسبه و استفاده مجدد، هزینه‌ی این تابع رو نصف می‌کنه — روی لیست فاکتورهای بلند محسوسه
+  let debit = 0, overpaidTotal = 0;
+  linkedInvoices.forEach(inv=>{
+    const t = computeInvoiceTotals(inv);
+    debit += t.balance;
+    overpaidTotal += t.overpaid;
+  });
   const credit = transactions.filter(t=>t.customerId===customerId && t.type==='credit').reduce((s,t)=>s+(parseFloat(t.amount)||0),0) + overpaidTotal;
   return { debit, credit, net: credit - debit }; // net>0 یعنی بستانکار، net<0 یعنی بدهکار
+}
+// نسخه‌ی حافظه‌دارِ customerBalance، فقط برای یک اجرای رندر (مثلاً یک بار renderInvoiceListTab) —
+// وقتی چند فاکتور مال یک مشتری هستن، به‌جای اسکن دوباره‌ی کل آرایه‌ی invoices برای هرکدوم، یک بار حساب می‌شه
+function customerBalanceMemoized(cache){
+  return (customerId)=>{
+    if(cache.has(customerId)) return cache.get(customerId);
+    const v = customerBalance(customerId);
+    cache.set(customerId, v);
+    return v;
+  };
 }
 
 function renderCustomersTab(){
@@ -3344,6 +3401,16 @@ function renderNavOverlay(){
       </div>
     </div>
   `;
+}
+// قبل از حذف واقعی یک ردیف (از آرایه‌ی داده)، اول یک انیمیشن محوشدن/جمع‌شدن کوتاه روی خودِ کارت اجرا می‌شه،
+// و بعد callback (که splice+render واقعیه) صدا زده می‌شه — تا حذف ردیف به‌جای پرش ناگهانی، نرم به‌نظر بیاد
+function animateAndRemoveRow(el, onDone){
+  if(!el){ onDone(); return; }
+  let done = false;
+  const finish = ()=>{ if(done) return; done = true; onDone(); };
+  el.classList.add('row-removing');
+  el.addEventListener('transitionend', finish, {once:true});
+  setTimeout(finish, 220); // اگه transitionend به هر دلیلی شلیک نشد (مثلا prefers-reduced-motion)، خودش انجام بشه
 }
 function render(){
   const app = document.getElementById('app');
