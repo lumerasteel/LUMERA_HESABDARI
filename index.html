@@ -356,7 +356,7 @@
 <div class="wrap" id="app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
-const STORE_KEYS = { materials:'lumera_materials', products:'lumera_products', productCategories:'lumera_productCategories', records:'lumera_records', invoices:'lumera_invoices', invoiceSeq:'lumera_invoiceSeq', customers:'lumera_customers', transactions:'lumera_transactions', overheadPerUnit:'lumera_overheadPerUnit', overheadPercent:'lumera_overheadPercent', suppliers:'lumera_suppliers', purchases:'lumera_purchases', reminders:'lumera_reminders', expenses:'lumera_expenses', expenseCategories:'lumera_expenseCategories', bankInfo:'lumera_bankInfo', downloadDirName:'lumera_downloadDirName' };
+const STORE_KEYS = { materials:'lumera_materials', products:'lumera_products', productCategories:'lumera_productCategories', records:'lumera_records', invoices:'lumera_invoices', invoiceSeq:'lumera_invoiceSeq', customers:'lumera_customers', transactions:'lumera_transactions', overheadPerUnit:'lumera_overheadPerUnit', overheadPercent:'lumera_overheadPercent', suppliers:'lumera_suppliers', purchases:'lumera_purchases', reminders:'lumera_reminders', expenses:'lumera_expenses', expenseCategories:'lumera_expenseCategories', bankInfo:'lumera_bankInfo', downloadDirName:'lumera_downloadDirName', cheques:'lumera_cheques' };
 const UNITS = ['کیلوگرم','متر','متر مربع','ورق','عدد'];
 const LABOR_PRESETS = ['برش لیزر','خم‌کاری','رنگ','جوش‌کاری'];
 function navIcon(paths){ return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${paths}</svg>`; }
@@ -368,6 +368,7 @@ const NAV_ICONS = {
   expenses:'<path d="M4 2h16v19l-3-2-3 2-3-2-3 2-3-2-1 1z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/>',
   suppliers:'<rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
   materials:'<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  cheques:'<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/>',
   dashboardGroup:'<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
   dashboard:'<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
   report:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
@@ -383,6 +384,7 @@ const NAV_TREE = [
     { tab:'expenses', label:'هزینه‌ها' },
     { tab:'suppliers', label:'تامین‌کنندگان' },
     { tab:'materials', label:'مواد اولیه' },
+    { tab:'cheques', label:'چک‌ها' },
   ]},
   { key:'dashboardGroup', label:'داشبورد', children:[
     { tab:'dashboard', label:'نمای کلی' },
@@ -634,12 +636,15 @@ let purchases = loadJSON(STORE_KEYS.purchases, []); // [{id,supplierId,date,amou
 let manualReminders = loadJSON(STORE_KEYS.reminders, []); // [{id,date,text,invoiceId,done}]
 let expenses = loadJSON(STORE_KEYS.expenses, []); // [{id,categoryName,amount,date,note,tag}]
 let expenseCategories = loadJSON(STORE_KEYS.expenseCategories, []); // [{id,name,tag,defaultAmount}]
+// چک: {id, direction:'receivable'|'payable', amount, dueDate, personName, customerId, supplierId, chequeNumber, bankName, status:'pending'|'cashed'|'bounced', note}
+// receivable = چک دریافتی (از مشتری گرفتیم، منتظریم نقد بشه) | payable = چک پرداختی (به کسی دادیم، باید نقد کنه)
+let cheques = loadJSON(STORE_KEYS.cheques, []);
 
 let tab = 'products';
 let navMenuOpen = false; // پنجره دسترسی (منوی درختی) باز است یا نه
 let navExpanded = new Set(); // کدام گروه‌های منوی درختی باز هستند
 let editingMatId = null;
-let newMat = { name:'', unit:UNITS[0], price:'' };
+let newMat = { name:'', unit:UNITS[0], price:'', stockQty:'', lowStockThreshold:'' };
 let newCategoryName = ''; // نام دسته جدید در حال تایپ در تب محصولات
 let newProductName = ''; // نام محصول جدید در حال تایپ
 let newProductCategoryId = ''; // دسته انتخاب‌شده برای محصول جدید در حال افزودن
@@ -1268,6 +1273,30 @@ function loadInvoiceForEdit(id){
   editingInvId = id;
   invTab = 'edit';
 }
+// کپی سریع یک فاکتور قدیمی — برای مشتری‌های تکراری که دوباره همون کالاها رو سفارش می‌دن، به‌جای این‌که از صفر
+// همه‌ی ردیف‌ها رو بسازی، فقط تاریخ و پرداخت‌ها خالی می‌شه و بقیه (مشتری، ردیف‌ها، تخفیف، یادداشت) کپی می‌مونه
+function duplicateInvoice(id){
+  const inv = invoices.find(i=>i.id===id);
+  if(!inv) return;
+  const clone = JSON.parse(JSON.stringify(inv));
+  delete clone.id;
+  clone.number = null; // شماره‌ی جدید موقع ذخیره گرفته می‌شه
+  clone.status = 'draft';
+  clone.date = todayStr();
+  clone.validTo = '';
+  clone.deliveryDueDate = '';
+  clone.payments = [];
+  clone.paidAmount = '';
+  clone.prevBalanceUseManual = false;
+  clone.prevBalanceManual = '';
+  clone.prevBalanceNote = '';
+  // آی‌دی تازه برای هر ردیف تا با فاکتور اصلی قاطی نشه
+  clone.lines = (clone.lines||[]).map(l=> ({...l, id: Date.now().toString()+Math.random().toString(36).slice(2)}));
+  invDraft = clone;
+  invActiveWorkspace = (invDraft.lines[0] && invDraft.lines[0].activityType) || invDraft.activityType || 'lumera';
+  editingInvId = null;
+  invTab = 'edit';
+}
 function resolveInvoiceStatus(inv, targetStatus){
   let status = targetStatus || inv.status || 'draft';
   if(status==='final' || status==='paid'){
@@ -1357,6 +1386,14 @@ let invSearchDebounceTimer = null;
 // تعداد فاکتورهایی که فعلاً توی لیست نشون داده می‌شن — برای اینکه لیست فاکتورهای زیاد (بعد از ماه‌ها کارکردن)
 // کل صفحه رو کند نکنه؛ با دکمه‌ی «نمایش بیشتر» زیاد می‌شه
 let invListVisibleCount = 30;
+// فیلتر سریع — وقتی از داشبورد روی یه عدد (مثلا «پروژه‌های فعال») کلیک می‌کنی، همین فیلتر ست می‌شه تا
+// مستقیم همون فاکتورها رو ببینی، نه این‌که خودت دنبالشون بگردی
+let invQuickFilter = null; // null | 'active' | 'drafts'
+function invoiceMatchesQuickFilter(inv){
+  if(invQuickFilter==='active') return inv.status!=='cancelled' && inv.status!=='draft' && inv.projectStatus!=='delivered';
+  if(invQuickFilter==='drafts') return inv.status==='draft';
+  return true;
+}
 function renderBankInfoSettings(){
   const isOpen = bankInfoEditorOpen;
   return `
@@ -1402,7 +1439,9 @@ function renderInvoiceListTab(){
     <button id="newInvBtn" class="btn btn-red" style="width:100%">+ فاکتور جدید</button>`;
   }
   const q = toLatinDigits(invSearchQuery.trim().toLowerCase());
-  const filtered = !q ? invoices : invoices.filter(inv=>{
+  const filtered = invoices.filter(inv=>{
+    if(!invoiceMatchesQuickFilter(inv)) return false;
+    if(!q) return true;
     const name = (inv.customerName||'').toLowerCase();
     const phone = toLatinDigits(inv.customerPhone||'');
     const code = toLatinDigits((inv.projectCode||'').toLowerCase());
@@ -1422,9 +1461,14 @@ function renderInvoiceListTab(){
   const visible = filtered.slice(0, invListVisibleCount);
   const balCache = new Map();
   const getBalance = customerBalanceMemoized(balCache);
+  const quickFilterLabel = invQuickFilter==='active' ? 'پروژه‌های فعال' : (invQuickFilter==='drafts' ? 'پیش‌فاکتورهای باز' : null);
   return `
     ${renderBankInfoSettings()}
     <button id="newInvBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ فاکتور جدید</button>
+    ${quickFilterLabel ? `<div class="row-flex" style="margin-bottom:10px;align-items:center">
+      <span style="flex:1;font-weight:700;font-size:13px">فیلتر: ${quickFilterLabel}</span>
+      <button id="invClearQuickFilterBtn" class="btn btn-outline" style="font-size:12px">حذف فیلتر ×</button>
+    </div>` : ''}
     <input id="invSearchInput" placeholder="🔍 جستجو: شماره فاکتور، نام/تلفن مشتری، کد پروژه، تاریخ یا وضعیت" value="${escapeAttr(invSearchQuery)}" style="width:100%;margin-bottom:10px;border:1.5px solid #000">
     ${filtered.length===0? '<p class="empty">نتیجه‌ای پیدا نشد</p>' : visible.map(inv=>{
       const t = computeInvoiceTotals(inv);
@@ -1460,9 +1504,16 @@ function renderInvoiceListTab(){
         <div class="row-flex" style="margin-top:8px">
           <button class="btn btn-outline inv-edit" data-id="${inv.id}" style="flex:1;font-size:12px">ویرایش</button>
           <button class="btn btn-black inv-jpg" data-id="${inv.id}" style="flex:1;font-size:12px">خروجی JPG</button>
-          <button class="btn btn-outline inv-print" data-id="${inv.id}" style="flex:1;font-size:12px">چاپ</button>
+          <button class="btn btn-outline inv-duplicate" data-id="${inv.id}" style="flex:1;font-size:12px">⧉ کپی</button>
           <button class="btn-icon inv-delete" data-id="${inv.id}">×</button>
         </div>
+        <div class="row-flex" style="margin-top:6px">
+          ${typeof navigator!=='undefined' && navigator.share ? `<button class="btn btn-outline inv-share" data-id="${inv.id}" style="flex:1;font-size:12px">↗ اشتراک‌گذاری</button>` : ''}
+          <button class="btn btn-outline inv-print" data-id="${inv.id}" style="flex:1;font-size:12px">چاپ</button>
+        </div>
+        ${t.balance>0 && inv.status!=='draft' && inv.status!=='cancelled' ? `
+        <button class="btn btn-outline inv-quick-settle" data-id="${inv.id}" style="width:100%;margin-top:6px;font-size:12px;color:#1A7A3A">✓ ثبت پرداخت کامل (${fmt(t.balance)} ت)</button>
+        ` : ''}
       </div>`;
     }).join('')}
     ${filtered.length>visible.length? `<button id="invLoadMoreBtn" class="btn btn-outline" style="width:100%;margin-top:6px">نمایش ۳۰ فاکتور بعدی (${filtered.length-visible.length} فاکتور دیگر مونده)</button>` : ''}
@@ -1667,8 +1718,33 @@ function bindInvoiceListEvents(){
     invListVisibleCount += 30;
     render();
   });
+  document.getElementById('invClearQuickFilterBtn')?.addEventListener('click', ()=>{
+    invQuickFilter = null;
+    invListVisibleCount = 30;
+    render();
+  });
   document.querySelectorAll('.inv-edit').forEach(el=>{
     el.addEventListener('click', e=>{ loadInvoiceForEdit(e.currentTarget.dataset.id); render(); });
+  });
+  document.querySelectorAll('.inv-duplicate').forEach(el=>{
+    el.addEventListener('click', e=>{ duplicateInvoice(e.currentTarget.dataset.id); render(); });
+  });
+  document.querySelectorAll('.inv-quick-settle').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.id;
+      const inv = invoices.find(i=>i.id===id);
+      if(!inv) return;
+      const t = computeInvoiceTotals(inv);
+      if(t.balance<=0) return;
+      if(!confirm('ثبت پرداخت کامل به مبلغ ' + fmt(t.balance) + ' تومان برای این فاکتور؟')) return;
+      const payments = Array.isArray(inv.payments) ? [...inv.payments] : [];
+      payments.push({ id:'quick-'+Date.now(), date: todayStr(), amount: t.balance, note:'ثبت سریع - پرداخت کامل' });
+      const updated = {...inv, payments};
+      updated.status = resolveInvoiceStatus(updated, updated.status);
+      invoices = invoices.map(i=> i.id===id? updated : i);
+      saveJSON(STORE_KEYS.invoices, invoices);
+      render();
+    });
   });
   document.querySelectorAll('.inv-delete').forEach(el=>{
     el.addEventListener('click', e=>{
@@ -1685,6 +1761,12 @@ function bindInvoiceListEvents(){
     el.addEventListener('click', e=>{
       const inv = invoices.find(i=>i.id===e.currentTarget.dataset.id);
       if(inv) exportInvoiceJPG(inv, e.currentTarget);
+    });
+  });
+  document.querySelectorAll('.inv-share').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const inv = invoices.find(i=>i.id===e.currentTarget.dataset.id);
+      if(inv) shareInvoiceJPG(inv, e.currentTarget);
     });
   });
   document.querySelectorAll('.inv-print').forEach(el=>{
@@ -1940,34 +2022,77 @@ function buildA4InvoiceHTML(inv){
 // یک‌بارمصرف می‌سازه که با پایان کار همون export حذف می‌شه، پس چند export هم‌زمان با هم تداخل ندارن. همچنین دکمه‌ی
 // مربوطه در حین export غیرفعال می‌شه تا از دوبار اجرا شدن با یک کلیک جلوگیری بشه، و خطاها دیگه بی‌صدا گم نمی‌شن.
 let invoiceExportInFlight = new Set();
+// رندر کردن فاکتور توی یک canvas مخفی (مشترک بین ذخیره‌ی JPG و اشتراک‌گذاری) — هر بار یک container
+// کاملاً مجزا و یک‌بارمصرف می‌سازه تا خروجی‌گیری هم‌زمان چند فاکتور با هم تداخل نکنه
+function renderInvoiceCanvas(inv){
+  return new Promise((resolve, reject)=>{
+    const root = document.createElement('div');
+    root.style.position = 'fixed';
+    root.style.left = '-9999px';
+    root.style.top = '0';
+    root.innerHTML = buildA4InvoiceHTML(inv);
+    document.body.appendChild(root);
+    const target = root.querySelector('.a4-wrap');
+    html2canvas(target, {scale:3, useCORS:true, allowTaint:true, backgroundColor:'#ffffff', logging:false}).then(canvas=>{
+      if(root.parentNode) root.parentNode.removeChild(root);
+      resolve(canvas);
+    }).catch(err=>{
+      if(root.parentNode) root.parentNode.removeChild(root);
+      reject(err);
+    });
+  });
+}
+function invoiceJpgFilename(inv){
+  const custNameForFile = (inv.customerName||'بدون نام').trim().replace(/[\\/:*?"<>|]/g,'-');
+  return 'LUMERASTEEL-' + custNameForFile + '-' + inv.number + '.jpg';
+}
 function exportInvoiceJPG(inv, triggerBtn){
   if(invoiceExportInFlight.has(inv.id)) return; // جلوگیری از اجرای هم‌زمان دوباره برای همون فاکتور (مثلا دابل کلیک)
   invoiceExportInFlight.add(inv.id);
   if(triggerBtn){ triggerBtn.disabled = true; triggerBtn.style.opacity = '0.6'; }
-
-  const root = document.createElement('div');
-  root.style.position = 'fixed';
-  root.style.left = '-9999px';
-  root.style.top = '0';
-  root.innerHTML = buildA4InvoiceHTML(inv);
-  document.body.appendChild(root);
-  const target = root.querySelector('.a4-wrap');
-
   const cleanup = ()=>{
     invoiceExportInFlight.delete(inv.id);
     if(triggerBtn){ triggerBtn.disabled = false; triggerBtn.style.opacity = ''; }
-    if(root.parentNode) root.parentNode.removeChild(root);
   };
-
-  html2canvas(target, {scale:3, useCORS:true, allowTaint:true, backgroundColor:'#ffffff', logging:false}).then(canvas=>{
-    const custNameForFile = (inv.customerName||'بدون نام').trim().replace(/[\\/:*?"<>|]/g,'-');
-    const filename = 'LUMERASTEEL-' + custNameForFile + '-' + inv.number + '.jpg';
+  renderInvoiceCanvas(inv).then(canvas=>{
     canvas.toBlob(blob=>{
       if(!blob){ alert('خروجی گرفتن از فاکتور با خطا مواجه شد، دوباره تلاش کن'); cleanup(); return; }
-      saveBlobSmart(blob, filename).then(()=>cleanup()).catch(()=>{
+      saveBlobSmart(blob, invoiceJpgFilename(inv)).then(()=>cleanup()).catch(()=>{
         alert('ذخیره فایل خروجی فاکتور با خطا مواجه شد');
         cleanup();
       });
+    }, 'image/jpeg', 0.97);
+  }).catch(()=>{
+    alert('گرفتن خروجی عکس فاکتور با خطا مواجه شد، دوباره تلاش کن');
+    cleanup();
+  });
+}
+// اشتراک‌گذاری فاکتور از طریق منوی «اشتراک‌گذاری» خودِ گوشی/سیستم‌عامل — کاربر خودش تصمیم می‌گیره با کدوم
+// برنامه (واتساپ، تلگرام، ایمیل، بلوتوث و...) بفرسته، به‌جای این‌که یک برنامه‌ی خاص از قبل انتخاب شده باشه
+function shareInvoiceJPG(inv, triggerBtn){
+  if(invoiceExportInFlight.has(inv.id)) return;
+  invoiceExportInFlight.add(inv.id);
+  if(triggerBtn){ triggerBtn.disabled = true; triggerBtn.style.opacity = '0.6'; }
+  const cleanup = ()=>{
+    invoiceExportInFlight.delete(inv.id);
+    if(triggerBtn){ triggerBtn.disabled = false; triggerBtn.style.opacity = ''; }
+  };
+  renderInvoiceCanvas(inv).then(canvas=>{
+    canvas.toBlob(blob=>{
+      if(!blob){ alert('ساخت خروجی فاکتور با خطا مواجه شد، دوباره تلاش کن'); cleanup(); return; }
+      const filename = invoiceJpgFilename(inv);
+      const file = new File([blob], filename, {type:'image/jpeg'});
+      const shareData = { files:[file], title: 'فاکتور #' + invNumStr(inv.number) };
+      if(navigator.canShare && navigator.canShare(shareData)){
+        navigator.share(shareData).then(cleanup).catch(err=>{
+          cleanup();
+          if(err && err.name==='AbortError') return; // کاربر خودش از منوی اشتراک‌گذاری انصراف داده — نیازی به پیام خطا نیست
+          alert('اشتراک‌گذاری انجام نشد، می‌تونی از دکمه‌ی «خروجی JPG» به‌جاش استفاده کنی');
+        });
+      } else {
+        cleanup();
+        alert('این مرورگر از اشتراک‌گذاری مستقیم پشتیبانی نمی‌کنه. از دکمه‌ی «خروجی JPG» استفاده کن و خودت از توی گالری با هر برنامه‌ای که خواستی بفرست.');
+      }
     }, 'image/jpeg', 0.97);
   }).catch(()=>{
     alert('گرفتن خروجی عکس فاکتور با خطا مواجه شد، دوباره تلاش کن');
@@ -2005,30 +2130,47 @@ ${styleTag}
 
 /* ---------- MATERIALS TAB ---------- */
 
+let matStockAdjustDraft = {}; // {materialId: 'amount typed in the quick adjust box'}
 function renderMaterialsTab(){
   return `
     <div class="box-gray">
       <h2 class="sec">${editingMatId?'ویرایش ماده':'افزودن ماده اولیه'}</h2>
       <input id="matName" placeholder="نام ماده (مثلا ورق استیل ۳ میل)" value="${escapeAttr(newMat.name)}" style="margin-bottom:8px">
-      <div class="row-flex">
+      <div class="row-flex" style="margin-bottom:8px">
         <select id="matUnit" style="flex:1">${UNITS.map(u=>`<option value="${u}" ${u===newMat.unit?'selected':''}>${u}</option>`).join('')}</select>
         <input id="matPrice" type="text" inputmode="decimal" placeholder="قیمت هر واحد (تومان)" value="${escapeAttr(newMat.price)}" style="flex:1">
+      </div>
+      <div class="row-flex">
+        <input id="matStockQty" type="text" inputmode="decimal" placeholder="${editingMatId?'موجودی فعلی':'موجودی اولیه'} (اختیاری)" value="${escapeAttr(newMat.stockQty)}" style="flex:1">
+        <input id="matLowStock" type="text" inputmode="decimal" placeholder="آستانه هشدار کمبود (اختیاری)" value="${escapeAttr(newMat.lowStockThreshold)}" style="flex:1">
       </div>
       <button id="matSubmitBtn" class="btn btn-black" style="width:100%;margin-top:4px">${editingMatId?'ذخیره تغییرات':'+ افزودن'}</button>
       ${editingMatId? `<button id="matCancelBtn" class="btn" style="width:100%;color:#888;background:none;margin-top:4px">انصراف از ویرایش</button>`:''}
     </div>
-    ${materials.length===0? `<p class="empty">هنوز ماده اولیه‌ای ثبت نشده</p>` : materials.map(m=>`
-      <div class="card" data-row-id="${m.id}" style="display:flex;justify-content:space-between;align-items:center">
-        <div>
-          <div class="card-title">${escapeAttr(m.name)}</div>
-          <div class="card-sub">${fmt(m.price)} تومان / ${m.unit}</div>
+    ${materials.length===0? `<p class="empty">هنوز ماده اولیه‌ای ثبت نشده</p>` : materials.map(m=>{
+      const stock = parseFloat(m.stockQty)||0;
+      const threshold = parseFloat(m.lowStockThreshold)||0;
+      const isLow = threshold>0 ? stock<=threshold : stock<=0;
+      return `
+      <div class="card" data-row-id="${m.id}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="card-title">${escapeAttr(m.name)}</div>
+            <div class="card-sub">${fmt(m.price)} تومان / ${m.unit}</div>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <button class="mat-edit btn" data-id="${m.id}" style="font-size:12px;color:#555;background:none">ویرایش</button>
+            <button class="mat-delete btn-icon" data-id="${m.id}">×</button>
+          </div>
         </div>
-        <div style="display:flex;gap:4px;align-items:center">
-          <button class="mat-edit btn" data-id="${m.id}" style="font-size:12px;color:#555;background:none">ویرایش</button>
-          <button class="mat-delete btn-icon" data-id="${m.id}">×</button>
+        <div style="margin-top:6px;font-weight:700;${isLow?'color:var(--red)':''}">موجودی: ${toPersianDigits(stock)} ${m.unit}${isLow?' — کم شده!':''}</div>
+        <div class="row-flex" style="margin-top:6px">
+          <input type="text" inputmode="decimal" class="mat-stock-adjust-input" data-id="${m.id}" placeholder="مقدار" value="${escapeAttr(matStockAdjustDraft[m.id]||'')}" style="flex:1;font-size:12px">
+          <button class="btn btn-outline mat-stock-add" data-id="${m.id}" style="font-size:12px;padding:6px 10px">+ افزودن</button>
+          <button class="btn btn-outline mat-stock-sub" data-id="${m.id}" style="font-size:12px;padding:6px 10px">− کسر</button>
         </div>
       </div>
-    `).join('')}
+    `;}).join('')}
   `;
 }
 function bindMaterialsEvents(){
@@ -2036,25 +2178,27 @@ function bindMaterialsEvents(){
     const name = document.getElementById('matName').value.trim();
     const unit = document.getElementById('matUnit').value;
     const price = parseFloat(document.getElementById('matPrice').value);
+    const stockQty = document.getElementById('matStockQty').value;
+    const lowStockThreshold = document.getElementById('matLowStock').value;
     if(!name || isNaN(price) || price<0) return;
     if(editingMatId){
-      materials = materials.map(m=> m.id===editingMatId? {...m,name,unit,price}: m);
+      materials = materials.map(m=> m.id===editingMatId? {...m,name,unit,price,stockQty,lowStockThreshold}: m);
       editingMatId=null;
     } else {
-      materials.push({id:Date.now().toString(), name, unit, price});
+      materials.push({id:Date.now().toString(), name, unit, price, stockQty: stockQty||'0', lowStockThreshold});
     }
     saveJSON(STORE_KEYS.materials, materials);
-    newMat = {name:'', unit:UNITS[0], price:''};
+    newMat = {name:'', unit:UNITS[0], price:'', stockQty:'', lowStockThreshold:''};
     render();
   });
   document.getElementById('matCancelBtn')?.addEventListener('click', ()=>{
-    editingMatId=null; newMat={name:'',unit:UNITS[0],price:''}; render();
+    editingMatId=null; newMat={name:'',unit:UNITS[0],price:'',stockQty:'',lowStockThreshold:''}; render();
   });
   document.querySelectorAll('.mat-edit').forEach(el=>{
     el.addEventListener('click', e=>{
       const m = materials.find(x=>x.id===e.currentTarget.dataset.id);
       editingMatId = m.id;
-      newMat = {name:m.name, unit:m.unit, price:String(m.price)};
+      newMat = {name:m.name, unit:m.unit, price:String(m.price), stockQty:String(m.stockQty||''), lowStockThreshold:String(m.lowStockThreshold||'')};
       render();
     });
   });
@@ -2068,6 +2212,32 @@ function bindMaterialsEvents(){
         saveJSON(STORE_KEYS.materials, materials);
         render();
       });
+    });
+  });
+  document.querySelectorAll('.mat-stock-adjust-input').forEach(el=>{
+    el.addEventListener('input', e=>{ matStockAdjustDraft[e.target.dataset.id] = e.target.value; });
+  });
+  // افزودن/کسر سریع موجودی — بدون نیاز به باز کردن فرم ویرایش کامل؛ برای زمانی که مواد خریداری یا مصرف می‌شه
+  document.querySelectorAll('.mat-stock-add').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.id;
+      const amount = parseFloat(matStockAdjustDraft[id]);
+      if(isNaN(amount) || amount<=0) return;
+      materials = materials.map(m=> m.id===id? {...m, stockQty: String((parseFloat(m.stockQty)||0) + amount)} : m);
+      delete matStockAdjustDraft[id];
+      saveJSON(STORE_KEYS.materials, materials);
+      render();
+    });
+  });
+  document.querySelectorAll('.mat-stock-sub').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.id;
+      const amount = parseFloat(matStockAdjustDraft[id]);
+      if(isNaN(amount) || amount<=0) return;
+      materials = materials.map(m=> m.id===id? {...m, stockQty: String(Math.max(0, (parseFloat(m.stockQty)||0) - amount))} : m);
+      delete matStockAdjustDraft[id];
+      saveJSON(STORE_KEYS.materials, materials);
+      render();
     });
   });
 }
@@ -2380,6 +2550,13 @@ function customerBalanceMemoized(cache){
     return v;
   };
 }
+// قدیمی‌ترین تاریخ یک فاکتور صادرشده/تسویه‌شده که هنوز مانده‌ی پرداخت‌نشده داره — برای این‌که بشه گفت
+// «این بدهی از چند روز پیش مونده»، نه فقط این‌که «بدهکاره» بدون هیچ سابقه‌ی زمانی
+function customerOldestUnpaidDate(customerId){
+  const unpaid = invoices.filter(i=> i.customerId===customerId && i.status!=='draft' && i.status!=='cancelled' && computeInvoiceTotals(i).balance>0);
+  if(unpaid.length===0) return null;
+  return unpaid.reduce((min,i)=> (!min || i.date<min) ? i.date : min, null);
+}
 
 function renderCustomersTab(){
   if(custView==='new'){
@@ -2450,11 +2627,17 @@ function renderCustomersTab(){
     return `<p class="empty">هنوز مشتری‌ای ثبت نشده</p>
     <button id="custNewBtn" class="btn btn-red" style="width:100%">+ مشتری جدید</button>`;
   }
+  // لیست مشتریان — بدهکارها اول (بیشترین بدهی بالای لیست)، چون معمولاً همینا رو باید پیگیری کنی
+  const custWithBal = customers.map(c=>({ c, bal: customerBalance(c.id) }));
+  custWithBal.sort((a,b)=> a.bal.net - b.bal.net); // net کمتر (منفی‌تر) = بدهکارتر، اول میاد
   return `
     <button id="custNewBtn" class="btn btn-red" style="width:100%;margin-bottom:10px">+ مشتری جدید</button>
-    ${customers.map(c=>{
+    ${custWithBal.map(({c,bal})=>{
+      const balLine = bal.net<0
+        ? `<span style="color:var(--red);font-weight:700">بدهکار: ${fmt(Math.abs(bal.net))} ت</span>`
+        : (bal.net>0 ? `<span style="color:#1A7A3A;font-weight:700">بستانکار: ${fmt(bal.net)} ت</span>` : `<span style="color:#6B7075">تسویه</span>`);
       return `<div class="card cust-row" data-id="${c.id}" style="cursor:pointer">
-        <div class="card-title"><span>${escapeAttr(c.name)}</span></div>
+        <div class="card-title"><span>${escapeAttr(c.name)}</span>${balLine}</div>
         ${c.phone? `<div class="card-sub">${escapeAttr(c.phone)}</div>`:''}
       </div>`;
     }).join('')}
@@ -2530,6 +2713,13 @@ function supplierBalance(supplierId){
   const totalAmount = list.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
   const totalPaid = list.reduce((s,p)=>s+(parseFloat(p.paid)||0),0);
   return { totalAmount, totalPaid, debt: Math.max(0, totalAmount-totalPaid) };
+}
+// قدیمی‌ترین تاریخ یک خرید از این تامین‌کننده که هنوز کامل تسویه نشده — همون منطق customerOldestUnpaidDate،
+// اینجا برعکسش: این بدهیِ ماست به تامین‌کننده، نه بدهیِ مشتری به ما
+function supplierOldestUnpaidDate(supplierId){
+  const unpaid = purchases.filter(p=> p.supplierId===supplierId && (parseFloat(p.amount)||0) > (parseFloat(p.paid)||0));
+  if(unpaid.length===0) return null;
+  return unpaid.reduce((min,p)=> (!min || p.date<min) ? p.date : min, null);
 }
 
 /* ---------- EXPENSES ---------- */
@@ -3114,6 +3304,136 @@ function bindExpensesEvents(){
   });
 }
 
+// ===== تب چک‌ها =====
+let chequeDraft = { direction:'receivable', amount:'', dueDate: todayStr(), personName:'', chequeNumber:'', bankName:'', note:'' };
+let editingChequeId = null;
+let chequeFilterStatus = 'pending'; // pending | cashed | bounced | all
+const CHEQUE_STATUS_LABELS = { pending:'در انتظار', cashed:'نقد شده', bounced:'برگشت خورده' };
+function renderChequesTab(){
+  const pendingReceivable = cheques.filter(c=>c.direction==='receivable' && c.status==='pending').reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
+  const pendingPayable = cheques.filter(c=>c.direction==='payable' && c.status==='pending').reduce((s,c)=>s+(parseFloat(c.amount)||0),0);
+  const todayS = todayStr();
+  const filtered = cheques.filter(c=> chequeFilterStatus==='all' || c.status===chequeFilterStatus)
+    .sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||''));
+  return `
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="card" style="margin:0"><div class="card-title"><span>چک‌های دریافتی در انتظار</span></div><div class="r-row bold" style="color:#1A7A3A"><span></span><span>${fmt(pendingReceivable)} ت</span></div></div>
+      <div class="card" style="margin:0"><div class="card-title"><span>چک‌های پرداختی در انتظار</span></div><div class="r-row bold" style="color:var(--red)"><span></span><span>${fmt(pendingPayable)} ت</span></div></div>
+    </div>
+    <div class="box-gray">
+      <h2 class="sec">${editingChequeId?'ویرایش چک':'ثبت چک جدید'}</h2>
+      <div class="mode-toggle" style="margin-bottom:8px">
+        <button class="btn ${chequeDraft.direction==='receivable'?'btn-black':'btn-outline'} cheque-dir-btn" data-dir="receivable">دریافتی (از مشتری)</button>
+        <button class="btn ${chequeDraft.direction==='payable'?'btn-black':'btn-outline'} cheque-dir-btn" data-dir="payable">پرداختی (به کسی)</button>
+      </div>
+      <input id="chequePersonName" placeholder="${chequeDraft.direction==='receivable'?'نام مشتری/صادرکننده چک':'نام گیرنده چک'}" value="${escapeAttr(chequeDraft.personName)}" style="margin-bottom:8px">
+      <div class="row-flex" style="margin-bottom:8px">
+        <input id="chequeAmount" type="text" inputmode="decimal" placeholder="مبلغ (تومان)" value="${escapeAttr(chequeDraft.amount)}" style="flex:1">
+        ${renderJalaliDateInput('chequeDueDate', chequeDraft.dueDate, 'flex:1')}
+      </div>
+      <div class="row-flex" style="margin-bottom:8px">
+        <input id="chequeNumber" placeholder="شماره چک (اختیاری)" value="${escapeAttr(chequeDraft.chequeNumber)}" style="flex:1">
+        <input id="chequeBankName" placeholder="نام بانک (اختیاری)" value="${escapeAttr(chequeDraft.bankName)}" style="flex:1">
+      </div>
+      <input id="chequeNote" placeholder="یادداشت (اختیاری)" value="${escapeAttr(chequeDraft.note)}" style="margin-bottom:8px">
+      <button id="chequeSubmitBtn" class="btn btn-black" style="width:100%">${editingChequeId?'ذخیره تغییرات':'+ ثبت چک'}</button>
+      ${editingChequeId? `<button id="chequeCancelBtn" class="btn" style="width:100%;color:#888;background:none;margin-top:4px">انصراف از ویرایش</button>`:''}
+    </div>
+    <div class="mode-toggle" style="margin:10px 0">
+      <button class="btn ${chequeFilterStatus==='pending'?'btn-black':'btn-outline'} cheque-filter-btn" data-status="pending" style="font-size:11px;padding:6px 4px">در انتظار</button>
+      <button class="btn ${chequeFilterStatus==='cashed'?'btn-black':'btn-outline'} cheque-filter-btn" data-status="cashed" style="font-size:11px;padding:6px 4px">نقد شده</button>
+      <button class="btn ${chequeFilterStatus==='bounced'?'btn-black':'btn-outline'} cheque-filter-btn" data-status="bounced" style="font-size:11px;padding:6px 4px">برگشتی</button>
+      <button class="btn ${chequeFilterStatus==='all'?'btn-black':'btn-outline'} cheque-filter-btn" data-status="all" style="font-size:11px;padding:6px 4px">همه</button>
+    </div>
+    ${filtered.length===0? '<p class="empty">چکی در این بخش نیست</p>' : filtered.map(c=>{
+      const overdue = c.status==='pending' && c.dueDate < todayS;
+      const dirColor = c.direction==='receivable' ? '#1A7A3A' : 'var(--red)';
+      return `
+      <div class="card" data-row-id="${c.id}" style="${overdue?'border-color:var(--red)':''}">
+        <div class="card-title">
+          <span style="color:${dirColor};font-weight:700">${c.direction==='receivable'?'دریافتی':'پرداختی'} — ${escapeAttr(c.personName||'-')}</span>
+          <span style="font-size:11px;font-weight:700;color:#6B7075">${CHEQUE_STATUS_LABELS[c.status]}</span>
+        </div>
+        <div class="card-sub" style="${overdue?'color:var(--red);font-weight:700':''}">سررسید: ${jalaliStr(c.dueDate)}${overdue?' (گذشته)':''}${c.chequeNumber?' — شماره: '+escapeAttr(c.chequeNumber):''}${c.bankName?' — '+escapeAttr(c.bankName):''}</div>
+        <div style="margin-top:4px;font-weight:700">${fmt(c.amount)} تومان</div>
+        ${c.note? `<div class="note" style="margin-top:2px;text-align:right">${escapeAttr(c.note)}</div>` : ''}
+        <div class="row-flex" style="margin-top:8px">
+          ${c.status==='pending'? `
+          <button class="btn btn-outline cheque-mark" data-id="${c.id}" data-status="cashed" style="flex:1;font-size:12px;color:#1A7A3A">نقد شد</button>
+          <button class="btn btn-outline cheque-mark" data-id="${c.id}" data-status="bounced" style="flex:1;font-size:12px;color:var(--red)">برگشت خورد</button>
+          ` : `<button class="btn btn-outline cheque-mark" data-id="${c.id}" data-status="pending" style="flex:1;font-size:12px">بازگردانی به در انتظار</button>`}
+          <button class="btn btn-outline cheque-edit" data-id="${c.id}" style="flex:1;font-size:12px">ویرایش</button>
+          <button class="btn-icon cheque-delete" data-id="${c.id}">×</button>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+function bindChequesEvents(){
+  document.querySelectorAll('.cheque-dir-btn').forEach(el=>{
+    el.addEventListener('click', e=>{ chequeDraft.direction = e.currentTarget.dataset.dir; render(); });
+  });
+  document.getElementById('chequePersonName')?.addEventListener('input', e=>{ chequeDraft.personName = e.target.value; });
+  document.getElementById('chequeAmount')?.addEventListener('input', e=>{ chequeDraft.amount = e.target.value; });
+  bindJalaliDateInput('chequeDueDate', iso=>{ chequeDraft.dueDate = iso; });
+  document.getElementById('chequeNumber')?.addEventListener('input', e=>{ chequeDraft.chequeNumber = e.target.value; });
+  document.getElementById('chequeBankName')?.addEventListener('input', e=>{ chequeDraft.bankName = e.target.value; });
+  document.getElementById('chequeNote')?.addEventListener('input', e=>{ chequeDraft.note = e.target.value; });
+  document.getElementById('chequeSubmitBtn')?.addEventListener('click', ()=>{
+    const amount = parseFloat(chequeDraft.amount);
+    if(!chequeDraft.personName.trim() || isNaN(amount) || amount<=0 || !chequeDraft.dueDate){
+      alert('نام، مبلغ و تاریخ سررسید را وارد کن'); return;
+    }
+    if(editingChequeId){
+      cheques = cheques.map(c=> c.id===editingChequeId? {...c, ...chequeDraft, amount}: c);
+      editingChequeId = null;
+    } else {
+      cheques.push({ id:Date.now().toString(), ...chequeDraft, amount, status:'pending' });
+    }
+    saveJSON(STORE_KEYS.cheques, cheques);
+    chequeDraft = { direction:'receivable', amount:'', dueDate: todayStr(), personName:'', chequeNumber:'', bankName:'', note:'' };
+    render();
+  });
+  document.getElementById('chequeCancelBtn')?.addEventListener('click', ()=>{
+    editingChequeId = null;
+    chequeDraft = { direction:'receivable', amount:'', dueDate: todayStr(), personName:'', chequeNumber:'', bankName:'', note:'' };
+    render();
+  });
+  document.querySelectorAll('.cheque-filter-btn').forEach(el=>{
+    el.addEventListener('click', e=>{ chequeFilterStatus = e.currentTarget.dataset.status; render(); });
+  });
+  document.querySelectorAll('.cheque-mark').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.id;
+      const status = e.currentTarget.dataset.status;
+      cheques = cheques.map(c=> c.id===id? {...c, status}: c);
+      saveJSON(STORE_KEYS.cheques, cheques);
+      render();
+    });
+  });
+  document.querySelectorAll('.cheque-edit').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const c = cheques.find(x=>x.id===e.currentTarget.dataset.id);
+      if(!c) return;
+      editingChequeId = c.id;
+      chequeDraft = { direction:c.direction, amount:String(c.amount), dueDate:c.dueDate, personName:c.personName||'', chequeNumber:c.chequeNumber||'', bankName:c.bankName||'', note:c.note||'' };
+      render();
+    });
+  });
+  document.querySelectorAll('.cheque-delete').forEach(el=>{
+    el.addEventListener('click', e=>{
+      if(!confirm('این چک حذف شود؟')) return;
+      const id = e.currentTarget.dataset.id;
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        cheques = cheques.filter(c=>c.id!==id);
+        saveJSON(STORE_KEYS.cheques, cheques);
+        render();
+      });
+    });
+  });
+}
+
 // ===== تب گزارش =====
 let reportPeriod = 'month'; // week | month | q3 | q6 | year
 let reportStartDate = todayStr();
@@ -3150,12 +3470,17 @@ function invoiceRevenueByActivity(inv){
 function reportData(period){
   const {start, end} = periodRange(period);
   const counted = invoices.filter(inv=> (inv.status==='final' || inv.status==='paid') && inv.date>=start && inv.date<=end);
-  let lumera = 0, drafting = 0, graphic = 0;
+  let lumera = 0, drafting = 0, graphic = 0, grossProfit = 0;
   counted.forEach(inv=>{
     const r = invoiceRevenueByActivity(inv);
     lumera += r.lumera; drafting += r.drafting; graphic += r.graphic;
+    grossProfit += computeInvoiceTotals(inv).profitAfterDiscount;
   });
-  return { lumera, drafting, graphic, total: lumera+drafting+graphic, count: counted.length, start, end };
+  // فقط هزینه‌های «کسب‌وکار» از سود کم می‌شن، نه هزینه‌های شخصی — چون هزینه شخصی ربطی به سودآوری کار نداره
+  const businessExpenses = expenses.filter(e=> e.tag==='business' && e.date>=start && e.date<=end)
+    .reduce((s,e)=>s+(parseFloat(e.amount)||0), 0);
+  const netProfit = grossProfit - businessExpenses;
+  return { lumera, drafting, graphic, total: lumera+drafting+graphic, count: counted.length, start, end, grossProfit, businessExpenses, netProfit };
 }
 
 const REPORT_PERIOD_LABELS = { week:'هفتگی', month:'ماهانه', q3:'سه‌ماهه', q6:'شش‌ماهه', year:'سالانه' };
@@ -3198,6 +3523,47 @@ function getAllReminders(){
     if(!c.dueDay) return;
     const dueDate = nextDueDateForDay(c.dueDay);
     list.push({ id:'expcat-'+c.id, date: dueDate, type:'هزینه ثابت', text:`سررسید ${c.name}${c.defaultAmount? ' — '+fmt(c.defaultAmount)+' ت':''}`, invoiceId:null, source:'auto', done:false });
+  });
+  // بدهی معوق مشتری — اگه یه مشتری بیش از ۳۰ روزه یه فاکتور پرداخت‌نشده داره، یادآوری پیگیری خودکار ساخته می‌شه؛
+  // چون این زنده از روی مانده‌حساب حساب می‌شه، به‌محض تسویه شدن بدهی، خودش از لیست یادآوری‌ها محو می‌شه
+  const todayS0 = todayStr();
+  customers.forEach(c=>{
+    const bal = customerBalance(c.id);
+    if(bal.net>=0) return; // فقط مشتری‌های بدهکار
+    const oldestDate = customerOldestUnpaidDate(c.id);
+    if(!oldestDate) return;
+    const daysPast = Math.floor((new Date(todayS0) - new Date(oldestDate)) / 86400000);
+    if(daysPast>=30){
+      list.push({ id:'debt-'+c.id, date: oldestDate, type:'بدهی معوق', text:`${c.name} — ${toPersianDigits(daysPast)} روزه بدهکاره (${fmt(Math.abs(bal.net))} ت) — پیگیری کن`, invoiceId:null, source:'auto', done:false });
+    }
+  });
+  // بدهی معوق ما به تامین‌کننده — همون منطق برعکس؛ این‌بار خودمون بدهکاریم، نه مشتری
+  suppliers.forEach(s=>{
+    const bal = supplierBalance(s.id);
+    if(bal.debt<=0) return;
+    const oldestDate = supplierOldestUnpaidDate(s.id);
+    if(!oldestDate) return;
+    const daysPast = Math.floor((new Date(todayS0) - new Date(oldestDate)) / 86400000);
+    if(daysPast>=30){
+      list.push({ id:'suppdebt-'+s.id, date: oldestDate, type:'بدهی به تامین‌کننده', text:`${toPersianDigits(daysPast)} روزه به ${s.name} بدهکاریم (${fmt(bal.debt)} ت)`, invoiceId:null, source:'auto', done:false });
+    }
+  });
+  // کمبود موجودی مواد اولیه — فقط برای موادی که خودت آستانه‌ی هشدار براشون تعیین کردی (تا برای موادی که
+  // اصلاً موجودیشون رو دنبال نمی‌کنی، شلوغ و بی‌مورد هشدار نده)
+  materials.forEach(m=>{
+    const threshold = parseFloat(m.lowStockThreshold)||0;
+    if(threshold<=0) return;
+    const stock = parseFloat(m.stockQty)||0;
+    if(stock<=threshold){
+      list.push({ id:'lowstock-'+m.id, date: todayS0, type:'کمبود موجودی', text:`موجودی ${m.name} کم شده — ${toPersianDigits(stock)} ${m.unit} مونده`, invoiceId:null, source:'auto', done:false });
+    }
+  });
+  // سررسید چک‌های در انتظار — هم دریافتی هم پرداختی؛ مثل بقیه یادآورهای خودکار، با تاریخ سررسیدِ خودِ چک ثبت
+  // می‌شه و فیلتر «۷ روز آینده» طبیعتاً نشونش می‌ده یا مخفی نگهش می‌داره
+  cheques.forEach(c=>{
+    if(c.status!=='pending') return;
+    const dirLabel = c.direction==='receivable' ? 'دریافتی' : 'پرداختی';
+    list.push({ id:'cheque-'+c.id, date: c.dueDate, type:'سررسید چک', text:`چک ${dirLabel} ${c.personName||''} — ${fmt(c.amount)} ت`, invoiceId:null, source:'auto', done:false });
   });
   manualReminders.forEach(r=>{
     if(r.done) return;
@@ -3249,22 +3615,33 @@ function renderDashboardTab(){
   const weekAheadS = weekAhead.toISOString().slice(0,10);
   const visibleReminders = reminderShowAll ? reminders : reminders.filter(r=> r.date<=weekAheadS);
   const linkableInvoices = invoices.filter(i=> i.status!=='cancelled');
+  const urgentCount = reminders.filter(r=> r.date<=todayS).length;
 
   return `
+    <div class="row-flex" style="margin-bottom:14px">
+      <button id="dashNewInvBtn" class="btn btn-red" style="flex:1">+ فاکتور جدید</button>
+      <button id="dashNewExpBtn" class="btn btn-outline" style="flex:1">+ ثبت هزینه</button>
+    </div>
+
+    ${urgentCount>0 ? `<div class="card" style="margin-bottom:14px;border-color:var(--red)">
+      <div class="card-title" style="color:var(--red)"><span>⚠ ${toPersianDigits(urgentCount)} مورد نیاز به توجه امروز/گذشته داره</span></div>
+      <div class="card-sub">پایین همین صفحه، توی «یادآورها» می‌بینی دقیقاً کدوما هستن</div>
+    </div>` : ''}
+
     <h2 class="sec">وضعیت کلی</h2>
     <div class="grid2" style="margin-bottom:14px">
-      <div class="card"><div class="card-title"><span>پروژه‌های فعال</span></div><div class="r-row bold accent"><span></span><span>${toPersianDigits(s.activeProjects.length)}</span></div></div>
-      <div class="card"><div class="card-title"><span>پیش‌فاکتور باز</span></div><div class="r-row bold accent"><span></span><span>${toPersianDigits(s.openDrafts.length)}</span></div></div>
+      <div class="card dash-nav" data-nav="invoice-active" style="cursor:pointer"><div class="card-title"><span>پروژه‌های فعال</span></div><div class="r-row bold accent"><span>مشاهده ↗</span><span>${toPersianDigits(s.activeProjects.length)}</span></div></div>
+      <div class="card dash-nav" data-nav="invoice-drafts" style="cursor:pointer"><div class="card-title"><span>پیش‌فاکتور باز</span></div><div class="r-row bold accent"><span>مشاهده ↗</span><span>${toPersianDigits(s.openDrafts.length)}</span></div></div>
     </div>
-    <div class="card" style="margin-bottom:8px">
-      <div class="card-title"><span>جمع حساب مشتریان</span></div>
+    <div class="card dash-nav" data-nav="customers-debtors" style="margin-bottom:8px;cursor:pointer">
+      <div class="card-title"><span>جمع حساب مشتریان</span><span style="font-size:11px;color:#6B7075">مشاهده لیست ↗</span></div>
       <div class="grid2" style="margin-top:4px">
-        <span>بدهی مشتریان به ما: ${fmt(s.custDebt)} ت</span>
-        <span>طلب مشتریان از ما: ${fmt(s.custCredit)} ت</span>
+        <span style="color:var(--red);font-weight:700">بدهی مشتریان به ما: ${fmt(s.custDebt)} ت</span>
+        <span style="color:#1A7A3A;font-weight:700">طلب مشتریان از ما: ${fmt(s.custCredit)} ت</span>
       </div>
     </div>
-    <div class="card" style="margin-bottom:18px">
-      <div class="card-title"><span>فروش این ماه (تاکنون)</span></div>
+    <div class="card dash-nav" data-nav="report" style="margin-bottom:18px;cursor:pointer">
+      <div class="card-title"><span>فروش این ماه (تاکنون)</span><span style="font-size:11px;color:#6B7075">گزارش کامل ↗</span></div>
       <div class="grid2" style="margin-top:4px">
         <span>ساخت LUMERA: ${fmt(s.lumera)} ت</span>
         <span>نقشه‌کشی: ${fmt(s.drafting)} ت</span>
@@ -3278,11 +3655,13 @@ function renderDashboardTab(){
       <button id="reminderFilterBtn" class="btn btn-outline" style="flex:1">${reminderShowAll ? 'فقط ۷ روز آینده' : 'نمایش همه'}</button>
     </div>
     ${visibleReminders.length===0 ? '<p class="empty">یادآوری‌ای در این بازه نیست</p>' : visibleReminders.map(r=>{
-      const overdue = r.date < todayS;
+      // این نوع‌ها خودشون توی متن، فاصله‌ی زمانی رو گفتن (مثلا «۹۲ روزه بدهکاره»)، پس «(گذشته)» تکراریه
+      const selfDescribingTypes = ['بدهی معوق', 'بدهی به تامین‌کننده', 'کمبود موجودی'];
+      const urgent = r.date < todayS || r.type==='کمبود موجودی';
       return `
-      <div class="card" data-row-id="${r.id}" style="margin-bottom:8px;${overdue?'border-color:var(--red)':''}">
+      <div class="card" data-row-id="${r.id}" style="margin-bottom:8px;${urgent?'border-color:var(--red)':''}">
         <div class="card-title"><span>${escapeAttr(r.text)}</span></div>
-        <div class="card-sub" style="${overdue?'color:var(--red);font-weight:700':''}">${jalaliStr(r.date)} — ${r.type}${overdue?' (گذشته)':''}</div>
+        <div class="card-sub" style="${urgent?'color:var(--red);font-weight:700':''}">${jalaliStr(r.date)} — ${r.type}${(r.date<todayS && !selfDescribingTypes.includes(r.type))?' (گذشته)':''}</div>
         ${r.source==='manual' ? `<button class="btn btn-outline reminder-delete" data-id="${r.id}" style="margin-top:6px;width:100%">حذف یادآوری</button>` : ''}
       </div>`;
     }).join('')}
@@ -3301,6 +3680,31 @@ function renderDashboardTab(){
 }
 
 function bindDashboardEvents(){
+  document.getElementById('dashNewInvBtn')?.addEventListener('click', ()=>{
+    tab = 'invoice';
+    newInvoiceFromDraft();
+    render();
+  });
+  document.getElementById('dashNewExpBtn')?.addEventListener('click', ()=>{
+    tab = 'expenses';
+    expView = 'add';
+    render();
+  });
+  document.querySelectorAll('.dash-nav').forEach(el=>{
+    el.addEventListener('click', e=>{
+      const nav = e.currentTarget.dataset.nav;
+      if(nav==='invoice-active'){
+        tab = 'invoice'; invTab = 'list'; invQuickFilter = 'active'; invListVisibleCount = 30;
+      } else if(nav==='invoice-drafts'){
+        tab = 'invoice'; invTab = 'list'; invQuickFilter = 'drafts'; invListVisibleCount = 30;
+      } else if(nav==='customers-debtors'){
+        tab = 'customers'; custView = 'list';
+      } else if(nav==='report'){
+        tab = 'report';
+      }
+      render();
+    });
+  });
   document.getElementById('reminderFilterBtn')?.addEventListener('click', ()=>{ reminderShowAll = !reminderShowAll; render(); });
   document.querySelectorAll('.reminder-delete').forEach(el=>{
     el.addEventListener('click', e=>{
@@ -3383,6 +3787,16 @@ function renderReportTab(){
       </div>
       <div class="r-row bold accent" style="margin-top:8px"><span>جمع کل درآمد</span><span>${fmt(d.total)} تومان</span></div>
       ${leader ? `<div style="margin-top:6px;font-size:12px;color:#6B7075">در این بازه، درآمد ${escapeAttr(leader.label)} بیشتر بوده</div>` : ''}
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="card-title"><span>سود خالص این بازه</span></div>
+      <div class="grid2" style="margin-top:6px">
+        <span>سود ناخالص فاکتورها (بعد از قیمت تمام‌شده)</span><span>${fmt(d.grossProfit)} ت</span>
+        <span>هزینه‌های کسب‌وکار (ثابت/متفرقه)</span><span style="color:var(--red)">${fmt(d.businessExpenses)}- ت</span>
+      </div>
+      <div class="r-row bold" style="margin-top:8px;color:${d.netProfit>=0?'#1A7A3A':'var(--red)'}"><span>سود خالص</span><span>${fmt(Math.abs(d.netProfit))} تومان${d.netProfit<0?' (ضرر)':''}</span></div>
+      <p class="note" style="margin:8px 0 0;text-align:right">هزینه‌های شخصی توی این حساب نیستن — فقط هزینه‌های کسب‌وکار از سود کم شدن. سود ناخالص هم برای ردیف‌های دلخواه بدون «قیمت تمام‌شده» ثبت‌شده، دقیق نیست.</p>
     </div>
 
     <h2 class="sec" style="margin-top:20px">گزارش مشتریان (کل دوره)</h2>
@@ -3487,7 +3901,7 @@ function render(){
     </div>
     ${renderNavOverlay()}
     <div id="tabContent">
-      ${tab==='calc'?renderCalcTab(): tab==='invoice'?renderInvoiceTab(): tab==='customers'?renderCustomersTab(): tab==='suppliers'?renderSuppliersTab(): tab==='materials'?renderMaterialsTab(): tab==='products'?renderProductsTab(): tab==='report'?renderReportTab(): tab==='dashboard'?renderDashboardTab(): tab==='expenses'?renderExpensesTab(): renderHistoryTab()}
+      ${tab==='calc'?renderCalcTab(): tab==='invoice'?renderInvoiceTab(): tab==='customers'?renderCustomersTab(): tab==='suppliers'?renderSuppliersTab(): tab==='materials'?renderMaterialsTab(): tab==='products'?renderProductsTab(): tab==='report'?renderReportTab(): tab==='dashboard'?renderDashboardTab(): tab==='expenses'?renderExpensesTab(): tab==='cheques'?renderChequesTab(): renderHistoryTab()}
     </div>
     ${FS_SUPPORTED ? `
     <div class="row-flex" style="margin-top:20px;border-top:1px solid #eee;padding-top:16px">
@@ -3535,6 +3949,7 @@ function render(){
   if(tab==='report') bindReportEvents();
   if(tab==='dashboard') bindDashboardEvents();
   if(tab==='expenses') bindExpensesEvents();
+  if(tab==='cheques') bindChequesEvents();
   bindBackupEvents();
 }
 
@@ -3626,7 +4041,7 @@ async function saveBlobSmart(blob, filename){
   return false;
 }
 async function downloadBackup(){
-  const data = { materials, products, productCategoriesList, records, invoices, invoiceSeq, customers, transactions, overheadPerUnit, overheadPercent, suppliers, purchases, manualReminders, expenses, expenseCategories, bankInfo, exportedAt: new Date().toISOString() };
+  const data = { materials, products, productCategoriesList, records, invoices, invoiceSeq, customers, transactions, overheadPerUnit, overheadPercent, suppliers, purchases, manualReminders, expenses, expenseCategories, bankInfo, cheques, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const now = new Date();
   const stamp = todayStr() + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0');
@@ -3689,6 +4104,7 @@ function bindBackupEvents(){
           expenses = data.expenses || [];
           expenseCategories = data.expenseCategories || [];
           bankInfo = data.bankInfo || bankInfo;
+          cheques = data.cheques || [];
         } else {
           if(!confirm('این بک‌آپ شامل ' + itemCount + ' رکورد است (تاریخ تهیه: ' + exportedAt + '). اطلاعات این بک‌آپ با اطلاعات فعلی همین دستگاه «ادغام» می‌شود — چیزی از این دستگاه حذف نمی‌شود. ادامه می‌دهید؟')) { e.target.value=''; return; }
           materials = mergeArrayById(materials, data.materials);
@@ -3704,6 +4120,7 @@ function bindBackupEvents(){
           manualReminders = mergeArrayById(manualReminders, data.manualReminders);
           expenses = mergeArrayById(expenses, data.expenses);
           expenseCategories = mergeArrayById(expenseCategories, data.expenseCategories);
+          cheques = mergeArrayById(cheques, data.cheques);
           // تنظیمات سراسری (سربار، اطلاعات واریز) دست نمی‌خورند مگر این دستگاه هنوز مقداری نداشته باشد
           if(!overheadPerUnit) overheadPerUnit = data.overheadPerUnit || overheadPerUnit;
           if(overheadPercent==null) overheadPercent = data.overheadPercent!=null ? data.overheadPercent : overheadPercent;
@@ -3726,6 +4143,7 @@ function bindBackupEvents(){
         saveJSON(STORE_KEYS.expenses, expenses);
         saveJSON(STORE_KEYS.expenseCategories, expenseCategories);
         saveJSON(STORE_KEYS.bankInfo, bankInfo);
+        saveJSON(STORE_KEYS.cheques, cheques);
         alert(backupLoadMode==='replace' ? 'بک‌آپ با موفقیت جایگزین شد' : 'بک‌آپ با موفقیت ادغام شد');
         render();
       }catch(err){
