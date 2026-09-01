@@ -71,7 +71,7 @@
   .wrap{max-width:480px;margin:0 auto;padding:var(--sp-4);}
   @keyframes lumeraFadeIn{from{opacity:0;transform:translateY(8px) scale(0.99);}to{opacity:1;transform:translateY(0) scale(1);}}
   /* حذف نرم یک ردیف (اقلام فاکتور، مواد، دستمزد) — به‌جای ناپدید شدن ناگهانی، محو و جمع می‌شه */
-  [data-line],[data-item],[data-labor]{transition:opacity .18s ease,transform .18s ease,max-height .2s ease,margin .18s ease;}
+  [data-line],[data-item],[data-labor],[data-payment],[data-row-id]{transition:opacity .18s ease,transform .18s ease,max-height .2s ease,margin .18s ease;}
   .row-removing{opacity:0!important;transform:scale(0.96)!important;max-height:0!important;margin:0!important;overflow:hidden;pointer-events:none;}
   #tabContent{animation:lumeraFadeIn 320ms var(--ease);}
   @media (prefers-reduced-motion:reduce){ #tabContent{animation:none;} }
@@ -688,6 +688,7 @@ function blankInvoice(){
     paidAmount: '', // فیلد قدیمی — فقط برای سازگاری با فاکتورهای قبل از این نسخه نگه داشته شده
     payments: [], // واریزی‌های ریز با تاریخ: [{id, date, amount, note}]
     notes: '',
+    printDocType: 'auto', // auto | proforma | sale — چی روی خروجی چاپی برای مشتری نوشته بشه (پیش‌فاکتور/فاکتور فروش)، مستقل از وضعیت داخلی status
     prevBalanceUseManual: false, // false = خودکار از حساب مشتری، true = دستی
     prevBalanceManual: '', // مقدار دستی مانده قبلی (مثبت=بدهکار، منفی=بستانکار)
     prevBalanceNote: '' // توضیح کوتاه (مثلاً تاریخ و عنوان بدهی قبلی)
@@ -1115,6 +1116,15 @@ function invoiceNotesHTML(inv){
 }
 const STATUS_LABELS = { draft:'پیش‌فاکتور', final:'صادرشده', paid:'تسویه‌شده', cancelled:'لغوشده' };
 const INVOICE_TITLES = { draft:'پیش‌فاکتور فروش', final:'فاکتور فروش', paid:'فاکتور فروش (تسویه‌شده)', cancelled:'فاکتور فروش (لغوشده)' };
+// عنوانی که واقعاً روی خروجی چاپی (برای مشتری) درج می‌شه. وضعیت داخلی فاکتور (پیش‌فاکتور/صادرشده/تسویه‌شده/
+// لغوشده) همون چهارتا گزینه‌ی قبلی برای خودت می‌مونه؛ ولی این یکی جدا و صریحه: می‌تونی انتخاب کنی مشتری
+// دقیقاً «پیش‌فاکتور» ببینه یا «فاکتور فروش»، بدون اینکه به وضعیت داخلی فاکتور گره خورده باشه.
+// حالت پیش‌فرض (auto) همون رفتار قبلی رو داره (بر اساس وضعیت داخلی حدس می‌زنه).
+function invoicePrintTitle(inv){
+  if(inv.printDocType==='proforma') return 'پیش‌فاکتور فروش';
+  if(inv.printDocType==='sale') return 'فاکتور فروش' + (inv.status==='paid' ? ' (تسویه‌شده)' : (inv.status==='cancelled' ? ' (لغوشده)' : ''));
+  return INVOICE_TITLES[inv.status] || 'فاکتور فروش';
+}
 const PROJECT_STATUS_LABELS = { inquiry:'استعلام', design:'طراحی', approved:'تایید مشتری', making:'درحال ساخت', ready:'آماده تحویل', delivered:'تحویل/ارسال' };
 const PROJECT_STATUS_COLORS = { inquiry:'#6B7075', design:'#3A6EA5', approved:'#9B7ED9', making:'#E6A11E', ready:'#1A7A3A', delivered:'#2F3338' };
 
@@ -1431,12 +1441,12 @@ function renderInvoiceListTab(){
         : (netDue<0
           ? `<div class="r-row bold" style="margin-top:4px;color:#1A7A3A"><span>جمع کل (بستانکار مشتری)</span><span>${fmt(-netDue)} ت</span></div>`
           : '');
-      return `<div class="card inv-card">
+      return `<div class="card inv-card" data-row-id="${inv.id}">
         <div class="card-title">
           <span>#${invNumStr(inv.number)} — ${escapeAttr(inv.customerName||'بدون نام')}</span>
           <span class="inv-status ${statusCls}" data-id="${inv.id}" data-act="cycle">${STATUS_LABELS[inv.status]||inv.status}</span>
         </div>
-        <div class="card-sub">${jalaliStr(inv.date)} <span class="badge-activity">${invoiceActivityLabelCombined(inv)}</span></div>
+        <div class="card-sub">${jalaliStr(inv.date)} <span class="badge-activity">${invoiceActivityLabelCombined(inv)}</span>${inv.printDocType&&inv.printDocType!=='auto'? ` <span class="badge-activity" style="background:${inv.printDocType==='proforma'?'#9B7ED9':'#1A7A3A'}">${inv.printDocType==='proforma'?'پیش‌فاکتور':'فاکتور فروش'}</span>`:''}</div>
         <div style="margin:4px 0">
           <span style="font-size:11px;font-weight:700;color:${PROJECT_STATUS_COLORS[inv.projectStatus]||'#6B7075'};border:1px solid ${PROJECT_STATUS_COLORS[inv.projectStatus]||'#6B7075'};border-radius:6px;padding:2px 8px;display:inline-block">${PROJECT_STATUS_LABELS[inv.projectStatus]||'استعلام'}</span>
         </div>
@@ -1539,6 +1549,12 @@ function renderInvoiceEditTab(){
     <div class="row-flex" style="margin-bottom:6px">
       <label class="small">شماره فاکتور:</label>
       <input id="invNumberInput" type="text" inputmode="numeric" value="${escapeAttr(invDraft.number!=null? invDraft.number : invoiceSeq)}" style="flex:1;font-weight:700">
+    </div>
+    <p class="note" style="margin:0 0 4px;text-align:right">روی خروجی چاپی برای مشتری چی نوشته بشه؟ (وضعیت داخلی فاکتور — پیش‌فاکتور/صادرشده/تسویه‌شده — جدا و دست‌نخورده می‌مونه)</p>
+    <div class="mode-toggle" style="margin-bottom:12px">
+      <button class="btn ${(invDraft.printDocType||'auto')==='auto'?'btn-black':'btn-outline'} invdoctype-btn" data-doctype="auto" style="font-size:11px;padding:6px 4px;min-height:32px">خودکار (بر اساس وضعیت)</button>
+      <button class="btn ${invDraft.printDocType==='proforma'?'btn-black':'btn-outline'} invdoctype-btn" data-doctype="proforma" style="font-size:11px;padding:6px 4px;min-height:32px">پیش‌فاکتور</button>
+      <button class="btn ${invDraft.printDocType==='sale'?'btn-black':'btn-outline'} invdoctype-btn" data-doctype="sale" style="font-size:11px;padding:6px 4px;min-height:32px">فاکتور فروش</button>
     </div>
     <div class="box-gray">
       <select id="invCustomerSelect" style="margin-bottom:8px">
@@ -1656,7 +1672,10 @@ function bindInvoiceListEvents(){
   });
   document.querySelectorAll('.inv-delete').forEach(el=>{
     el.addEventListener('click', e=>{
-      if(confirm('این فاکتور حذف شود؟')) deleteInvoice(e.currentTarget.dataset.id);
+      if(!confirm('این فاکتور حذف شود؟')) return;
+      const id = e.currentTarget.dataset.id;
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>deleteInvoice(id));
     });
   });
   document.querySelectorAll('.inv-status[data-act="cycle"]').forEach(el=>{
@@ -1709,8 +1728,12 @@ function bindInvoiceEditEvents(){
   });
   document.querySelectorAll('.invpay-remove').forEach(el=>{
     el.addEventListener('click', e=>{
-      invDraft.payments.splice(+e.currentTarget.dataset.idx, 1);
-      render();
+      const idx = +e.currentTarget.dataset.idx;
+      const rowEl = e.currentTarget.closest('[data-payment]');
+      animateAndRemoveRow(rowEl, ()=>{
+        invDraft.payments.splice(idx, 1);
+        render();
+      });
     });
   });
   document.getElementById('invPrevBalManualToggle')?.addEventListener('change', e=>{ invDraft.prevBalanceUseManual = e.target.checked; render(); });
@@ -1722,6 +1745,9 @@ function bindInvoiceEditEvents(){
   document.getElementById('invProjectNote')?.addEventListener('input', e=>{ invDraft.projectNote = e.target.value; });
   document.querySelectorAll('.invws-btn').forEach(el=>{
     el.addEventListener('click', e=>{ invActiveWorkspace = e.currentTarget.dataset.ws; render(); });
+  });
+  document.querySelectorAll('.invdoctype-btn').forEach(el=>{
+    el.addEventListener('click', e=>{ invDraft.printDocType = e.currentTarget.dataset.doctype; render(); });
   });
   document.getElementById('invAddLineBtn')?.addEventListener('click', ()=>{ invDraft.lines.push(blankInvoiceLine()); render(); });
   document.getElementById('invSaveDraftBtn')?.addEventListener('click', ()=>saveInvoiceDraft('draft'));
@@ -1831,7 +1857,7 @@ function buildA4InvoiceHTML(inv){
         ${logoSrc? `<img class="a4-logo" src="${logoSrc}">` : ''}
       </div>
       <div class="a4-title-bar">
-        <div class="a4-invoice-title">${INVOICE_TITLES[inv.status] || 'فاکتور فروش'}</div>
+        <div class="a4-invoice-title">${invoicePrintTitle(inv)}</div>
         <div class="a4-red-line"></div>
         <div style="font-size:11px;color:#6B7075">شماره ${invNumStr(inv.number)}</div>
       </div>
@@ -1992,7 +2018,7 @@ function renderMaterialsTab(){
       ${editingMatId? `<button id="matCancelBtn" class="btn" style="width:100%;color:#888;background:none;margin-top:4px">انصراف از ویرایش</button>`:''}
     </div>
     ${materials.length===0? `<p class="empty">هنوز ماده اولیه‌ای ثبت نشده</p>` : materials.map(m=>`
-      <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+      <div class="card" data-row-id="${m.id}" style="display:flex;justify-content:space-between;align-items:center">
         <div>
           <div class="card-title">${escapeAttr(m.name)}</div>
           <div class="card-sub">${fmt(m.price)} تومان / ${m.unit}</div>
@@ -2035,10 +2061,13 @@ function bindMaterialsEvents(){
   document.querySelectorAll('.mat-delete').forEach(el=>{
     el.addEventListener('click', e=>{
       const id = e.currentTarget.dataset.id;
-      materials = materials.filter(m=>m.id!==id);
-      calc.items = calc.items.filter(it=>it.materialId!==id);
-      saveJSON(STORE_KEYS.materials, materials);
-      render();
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        materials = materials.filter(m=>m.id!==id);
+        calc.items = calc.items.filter(it=>it.materialId!==id);
+        saveJSON(STORE_KEYS.materials, materials);
+        render();
+      });
     });
   });
 }
@@ -2075,7 +2104,7 @@ function renderProductCard(p){
   }
   const price = productSalePrice(p.name);
   return `
-    <div class="card" style="margin-bottom:8px">
+    <div class="card" data-row-id="${p.id}" style="margin-bottom:8px">
       <div style="display:flex;gap:10px;align-items:center">
         ${p.image? `<img src="${p.image}" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--c-line);flex-shrink:0">`
           : `<div style="width:56px;height:56px;border-radius:10px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:20px;color:#bbb;flex-shrink:0">🖼</div>`}
@@ -2125,7 +2154,7 @@ function renderProductsTab(){
       const list = grouped[key]||[];
       const isOpen = expandedCategoryIds.has(key);
       return `
-      <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div class="card" data-row-id="${key}" style="margin-bottom:8px;padding:0;overflow:hidden">
         <div class="cat-toggle" data-key="${key}" style="display:flex;justify-content:space-between;align-items:center;padding:14px;cursor:pointer">
           <span style="display:flex;align-items:center;gap:8px;font-weight:700">
             <span style="display:inline-block;transition:transform .15s ease;transform:rotate(${isOpen?90:0}deg)">▸</span>
@@ -2173,12 +2202,15 @@ function bindProductsEvents(){
       e.stopPropagation();
       const id = e.currentTarget.dataset.id;
       if(!confirm('این دسته حذف بشه؟ محصولات این دسته به «بدون دسته‌بندی» منتقل می‌شوند (خودشون حذف نمی‌شوند)')) return;
-      productCategoriesList = productCategoriesList.filter(c=>c.id!==id);
-      products.forEach(p=>{ if(p.categoryId===id) p.categoryId=''; });
-      expandedCategoryIds.delete(id);
-      saveJSON(STORE_KEYS.productCategories, productCategoriesList);
-      saveJSON(STORE_KEYS.products, products);
-      render();
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        productCategoriesList = productCategoriesList.filter(c=>c.id!==id);
+        products.forEach(p=>{ if(p.categoryId===id) p.categoryId=''; });
+        expandedCategoryIds.delete(id);
+        saveJSON(STORE_KEYS.productCategories, productCategoriesList);
+        saveJSON(STORE_KEYS.products, products);
+        render();
+      });
     });
   });
   document.getElementById('newProductCategorySelect')?.addEventListener('change', e=>{ newProductCategoryId = e.target.value; });
@@ -2206,9 +2238,12 @@ function bindProductsEvents(){
       e.stopPropagation();
       const id = e.currentTarget.dataset.id;
       if(!confirm('این محصول از کاتالوگ حذف شود؟')) return;
-      products = products.filter(p=>p.id!==id);
-      saveJSON(STORE_KEYS.products, products);
-      render();
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        products = products.filter(p=>p.id!==id);
+        saveJSON(STORE_KEYS.products, products);
+        render();
+      });
     });
   });
   document.querySelectorAll('.prod-edit-info').forEach(el=>{
@@ -2267,7 +2302,7 @@ function renderHistoryTab(){
     ${filtered.length===0? '<p class="empty">محصولی پیدا نشد</p>' : `
       <div class="note" style="margin:0 0 8px;text-align:right">${toPersianDigits(filtered.length)} رکورد</div>
       ${visible.map(r=>`
-        <div class="card">
+        <div class="card" data-row-id="${r.id}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
               <div class="card-title">${escapeAttr(r.name)}</div>
@@ -2292,9 +2327,13 @@ function bindHistoryEvents(){
   document.getElementById('historyLoadMoreBtn')?.addEventListener('click', ()=>{ historyListLimit += 10; render(); });
   document.querySelectorAll('.rec-delete').forEach(el=>{
     el.addEventListener('click', e=>{
-      records = records.filter(r=>r.id!==e.currentTarget.dataset.id);
-      saveJSON(STORE_KEYS.records, records);
-      render();
+      const id = e.currentTarget.dataset.id;
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        records = records.filter(r=>r.id!==id);
+        saveJSON(STORE_KEYS.records, records);
+        render();
+      });
     });
   });
 }
@@ -2398,7 +2437,7 @@ function renderCustomersTab(){
 
       <div style="margin-top:16px;font-weight:700;font-size:13px">واریزی‌های آزاد</div>
       ${credits.length===0? '<p class="empty">واریزی ثبت نشده</p>' : credits.map(t=>`
-        <div class="card" style="margin-top:8px">
+        <div class="card" data-row-id="${t.id}" style="margin-top:8px">
           <div class="card-title"><span>${fmt(t.amount)} تومان</span>
             <button class="btn-icon cred-delete" data-id="${t.id}">×</button>
           </div>
@@ -2468,9 +2507,12 @@ function bindCustomersEvents(){
       e.stopPropagation();
       const id = e.currentTarget.dataset.id;
       if(!confirm('این واریزی حذف شود؟')) return;
-      transactions = transactions.filter(t=>t.id!==id);
-      saveJSON(STORE_KEYS.transactions, transactions);
-      render();
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        transactions = transactions.filter(t=>t.id!==id);
+        saveJSON(STORE_KEYS.transactions, transactions);
+        render();
+      });
     });
   });
 }
@@ -2728,7 +2770,7 @@ function renderSuppliersTab(){
       <div style="margin-top:16px;font-weight:700;font-size:13px">تاریخچه خریدها</div>
       ${list.length===0? '<p class="empty">خریدی ثبت نشده</p>' : list.map(p=>{
         const debt = Math.max(0,(parseFloat(p.amount)||0)-(parseFloat(p.paid)||0));
-        return `<div class="card" style="margin-top:8px">
+        return `<div class="card" data-row-id="${p.id}" style="margin-top:8px">
           <div class="card-title"><span>${fmt(p.amount)} تومان</span>
             <button class="btn-icon purch-delete" data-id="${p.id}">×</button>
           </div>
@@ -2808,9 +2850,12 @@ function bindSuppliersEvents(){
       e.stopPropagation();
       const id = e.currentTarget.dataset.id;
       if(!confirm('این خرید حذف شود؟')) return;
-      purchases = purchases.filter(p=>p.id!==id);
-      saveJSON(STORE_KEYS.purchases, purchases);
-      render();
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        purchases = purchases.filter(p=>p.id!==id);
+        saveJSON(STORE_KEYS.purchases, purchases);
+        render();
+      });
     });
   });
 }
@@ -2866,7 +2911,7 @@ function renderExpSummaryView(){
 
     <div style="font-weight:700;font-size:13px;margin-bottom:8px">آخرین خرج‌ها</div>
     ${recentExpenses.length===0? '<p class="empty">هنوز خرجی ثبت نشده</p>' : recentExpenses.map(e=>`
-      <div class="card">
+      <div class="card" data-row-id="${e.id}">
         <div class="card-title"><span>${escapeAttr(e.categoryName)}</span>
           <div><button class="btn-icon exp-edit" data-id="${e.id}" style="color:#000">✎</button><button class="btn-icon exp-delete" data-id="${e.id}">×</button></div>
         </div>
@@ -2949,7 +2994,7 @@ function renderExpListView(){
         <span>${toPersianDigits(filtered.length)} مورد</span><span>${fmt(filteredTotal)} تومان</span>
       </div>
       ${visible.map(e=>`
-        <div class="card">
+        <div class="card" data-row-id="${e.id}">
           <div class="card-title"><span>${escapeAttr(e.categoryName)}</span>
             <div><button class="btn-icon exp-edit" data-id="${e.id}" style="color:#000">✎</button><button class="btn-icon exp-delete" data-id="${e.id}">×</button></div>
           </div>
@@ -2983,7 +3028,7 @@ function renderExpCategoriesView(){
     </div>
     <div style="font-weight:700;font-size:13px;margin-bottom:8px">دسته‌های ثابت موجود</div>
     ${expenseCategories.length===0? '<p class="empty">هنوز دسته‌بندی ثابتی ثبت نشده</p>' : expenseCategories.map(c=>`
-      <div class="card${editingCategoryId===c.id?' card-active':''}">
+      <div class="card${editingCategoryId===c.id?' card-active':''}" data-row-id="${c.id}">
         <div class="card-title"><span>${escapeAttr(c.name)}</span>
           <div>
             <button class="btn-icon expcat-edit" data-id="${c.id}" style="color:#000">✎</button>
@@ -3024,8 +3069,12 @@ function bindExpensesEvents(){
   document.querySelectorAll('.expcat-delete').forEach(el=>{
     el.addEventListener('click', e=>{
       if(!confirm('این دسته‌بندی حذف شود؟')) return;
-      deleteExpenseCategory(e.currentTarget.dataset.id);
-      render();
+      const id = e.currentTarget.dataset.id;
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        deleteExpenseCategory(id);
+        render();
+      });
     });
   });
 
@@ -3055,8 +3104,12 @@ function bindExpensesEvents(){
   document.querySelectorAll('.exp-delete').forEach(el=>{
     el.addEventListener('click', e=>{
       if(!confirm('این خرج حذف شود؟')) return;
-      deleteExpense(e.currentTarget.dataset.id);
-      render();
+      const id = e.currentTarget.dataset.id;
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        deleteExpense(id);
+        render();
+      });
     });
   });
 }
@@ -3227,7 +3280,7 @@ function renderDashboardTab(){
     ${visibleReminders.length===0 ? '<p class="empty">یادآوری‌ای در این بازه نیست</p>' : visibleReminders.map(r=>{
       const overdue = r.date < todayS;
       return `
-      <div class="card" style="margin-bottom:8px;${overdue?'border-color:var(--red)':''}">
+      <div class="card" data-row-id="${r.id}" style="margin-bottom:8px;${overdue?'border-color:var(--red)':''}">
         <div class="card-title"><span>${escapeAttr(r.text)}</span></div>
         <div class="card-sub" style="${overdue?'color:var(--red);font-weight:700':''}">${jalaliStr(r.date)} — ${r.type}${overdue?' (گذشته)':''}</div>
         ${r.source==='manual' ? `<button class="btn btn-outline reminder-delete" data-id="${r.id}" style="margin-top:6px;width:100%">حذف یادآوری</button>` : ''}
@@ -3250,7 +3303,14 @@ function renderDashboardTab(){
 function bindDashboardEvents(){
   document.getElementById('reminderFilterBtn')?.addEventListener('click', ()=>{ reminderShowAll = !reminderShowAll; render(); });
   document.querySelectorAll('.reminder-delete').forEach(el=>{
-    el.addEventListener('click', e=>{ deleteManualReminder(e.currentTarget.dataset.id); render(); });
+    el.addEventListener('click', e=>{
+      const id = e.currentTarget.dataset.id;
+      const rowEl = e.currentTarget.closest('[data-row-id]');
+      animateAndRemoveRow(rowEl, ()=>{
+        deleteManualReminder(id);
+        render();
+      });
+    });
   });
   bindJalaliDateInput('newReminderDate', iso=>{ reminderDraft.date = iso; });
   document.getElementById('newReminderText')?.addEventListener('input', e=>{ reminderDraft.text = e.target.value; });
