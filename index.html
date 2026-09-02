@@ -128,7 +128,7 @@
   /* ---- Cards ---- */
   .card{background:rgba(255,255,255,0.58);backdrop-filter:blur(18px) saturate(170%);-webkit-backdrop-filter:blur(18px) saturate(170%);border:1px solid rgba(255,255,255,0.7);outline:1px solid var(--c-line-soft);outline-offset:-1px;border-radius:18px;padding:var(--sp-3);margin-bottom:var(--sp-2);box-shadow:var(--sh-flat);transition:box-shadow var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),transform var(--t-fast) var(--ease);}
   .card-active{border-color:var(--c-accent);}
-  .card-title{font-weight:var(--fw-bold);font-size:var(--fs-body);color:var(--c-ink);}
+  .card-title{font-weight:var(--fw-bold);font-size:var(--fs-body);color:var(--c-ink);display:flex;justify-content:space-between;align-items:center;gap:8px;}
   .card-sub{font-size:var(--fs-label);color:var(--c-steel);}
   .box-gray{background:rgba(241,242,244,0.75);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-radius:16px;padding:var(--sp-3);margin-bottom:var(--sp-4);box-shadow:var(--sh-inset);}
   @media (hover:hover){
@@ -268,6 +268,9 @@
   .grid2 > .card{padding:var(--sp-4);}
   .grid2 > .card .card-title{font-size:var(--fs-label);color:var(--c-steel);font-weight:var(--fw-medium);}
   .grid2 > .card .r-row.bold.accent{font-size:22px;font-weight:var(--fw-black);color:var(--c-accent);padding-top:2px;}
+  /* عدد آماری کوچیک روی کارت‌های داشبورد (مثلا تعداد پروژه‌های فعال) — نباید با عدد قیمت اصلی توی ماشین‌حساب
+     (بالا، همون سایز و وزن) قاطی بشه؛ یه‌خرده کوچیک‌تر و سبک‌تره چون فقط یه شمارشگره، نه مبلغ قیمت‌گذاری */
+  .dash-stat-num{font-size:20px;font-weight:var(--fw-black);color:var(--c-accent);}
   @media (max-width:380px){
     .grid2{grid-template-columns:1fr;gap:8px;}
   }
@@ -285,7 +288,6 @@
   .inv-line input.qty{width:54px;}
   .inv-line .lt{flex:1;font-size:var(--fs-label);}
   .badge-activity{display:inline-block;font-size:var(--fs-caption);border-radius:6px;padding:2px 8px;background:var(--c-ink);color:var(--c-white);margin-left:4px;}
-  .inv-card .card-title{display:flex;justify-content:space-between;align-items:center;}
 
   /* ---- A4 print invoice (flat, print-safe — no neomorphism) ---- */
   #invoiceRenderRoot{position:fixed;left:-9999px;top:0;}
@@ -641,6 +643,9 @@ let expenseCategories = loadJSON(STORE_KEYS.expenseCategories, []); // [{id,name
 let cheques = loadJSON(STORE_KEYS.cheques, []);
 
 let tab = 'products';
+// وقتی از یه میان‌بر (مثلا کارت‌های داشبورد) به یه تب دیگه می‌ری، تب قبلی اینجا ذخیره می‌شه تا بشه با دکمه‌ی
+// «بازگشت» برگشت — برخلاف رفتن از منوی همبرگری که مقصد رو عمداً عوض می‌کنی و نیازی به برگشت نداره
+let navBackStack = [];
 let navMenuOpen = false; // پنجره دسترسی (منوی درختی) باز است یا نه
 let navExpanded = new Set(); // کدام گروه‌های منوی درختی باز هستند
 let editingMatId = null;
@@ -3630,18 +3635,24 @@ function renderDashboardTab(){
 
     <h2 class="sec">وضعیت کلی</h2>
     <div class="grid2" style="margin-bottom:14px">
-      <div class="card dash-nav" data-nav="invoice-active" style="cursor:pointer"><div class="card-title"><span>پروژه‌های فعال</span></div><div class="r-row bold accent"><span>مشاهده ↗</span><span>${toPersianDigits(s.activeProjects.length)}</span></div></div>
-      <div class="card dash-nav" data-nav="invoice-drafts" style="cursor:pointer"><div class="card-title"><span>پیش‌فاکتور باز</span></div><div class="r-row bold accent"><span>مشاهده ↗</span><span>${toPersianDigits(s.openDrafts.length)}</span></div></div>
+      <div class="card dash-nav" data-nav="invoice-active" style="cursor:pointer">
+        <div class="card-title"><span>پروژه‌های فعال</span></div>
+        <div class="r-row" style="align-items:center;margin-top:2px"><span class="card-sub">مشاهده ↗</span><span class="dash-stat-num">${toPersianDigits(s.activeProjects.length)}</span></div>
+      </div>
+      <div class="card dash-nav" data-nav="invoice-drafts" style="cursor:pointer">
+        <div class="card-title"><span>پیش‌فاکتور باز</span></div>
+        <div class="r-row" style="align-items:center;margin-top:2px"><span class="card-sub">مشاهده ↗</span><span class="dash-stat-num">${toPersianDigits(s.openDrafts.length)}</span></div>
+      </div>
     </div>
     <div class="card dash-nav" data-nav="customers-debtors" style="margin-bottom:8px;cursor:pointer">
-      <div class="card-title"><span>جمع حساب مشتریان</span><span style="font-size:11px;color:#6B7075">مشاهده لیست ↗</span></div>
+      <div class="card-title"><span>جمع حساب مشتریان</span><span class="card-sub">مشاهده لیست ↗</span></div>
       <div class="grid2" style="margin-top:4px">
         <span style="color:var(--red);font-weight:700">بدهی مشتریان به ما: ${fmt(s.custDebt)} ت</span>
         <span style="color:#1A7A3A;font-weight:700">طلب مشتریان از ما: ${fmt(s.custCredit)} ت</span>
       </div>
     </div>
     <div class="card dash-nav" data-nav="report" style="margin-bottom:18px;cursor:pointer">
-      <div class="card-title"><span>فروش این ماه (تاکنون)</span><span style="font-size:11px;color:#6B7075">گزارش کامل ↗</span></div>
+      <div class="card-title"><span>فروش این ماه (تاکنون)</span><span class="card-sub">گزارش کامل ↗</span></div>
       <div class="grid2" style="margin-top:4px">
         <span>ساخت LUMERA: ${fmt(s.lumera)} ت</span>
         <span>نقشه‌کشی: ${fmt(s.drafting)} ت</span>
@@ -3681,11 +3692,13 @@ function renderDashboardTab(){
 
 function bindDashboardEvents(){
   document.getElementById('dashNewInvBtn')?.addEventListener('click', ()=>{
+    navBackStack.push(tab);
     tab = 'invoice';
     newInvoiceFromDraft();
     render();
   });
   document.getElementById('dashNewExpBtn')?.addEventListener('click', ()=>{
+    navBackStack.push(tab);
     tab = 'expenses';
     expView = 'add';
     render();
@@ -3693,6 +3706,7 @@ function bindDashboardEvents(){
   document.querySelectorAll('.dash-nav').forEach(el=>{
     el.addEventListener('click', e=>{
       const nav = e.currentTarget.dataset.nav;
+      navBackStack.push(tab);
       if(nav==='invoice-active'){
         tab = 'invoice'; invTab = 'list'; invQuickFilter = 'active'; invListVisibleCount = 30;
       } else if(nav==='invoice-drafts'){
@@ -3894,10 +3908,11 @@ function render(){
       <p class="sub">قیمت تمام‌شده، قیمت فروش و سود</p>
     </div>
     <div class="mobile-nav-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <button id="navOpenBtn" class="btn btn-outline" style="width:44px;flex-shrink:0;padding:0;font-size:18px">☰</button>
+      ${navBackStack.length>0 ? `<button id="navBackBtn" class="btn btn-outline" style="flex-shrink:0">→ بازگشت</button>` : `<button id="navOpenBtn" class="btn btn-outline" style="width:44px;flex-shrink:0;padding:0;font-size:18px">☰</button>`}
       <div class="card" style="flex:1;margin:0;padding:10px 14px;font-weight:700;display:flex;align-items:center;gap:8px">
         <span style="display:inline-flex;color:var(--c-steel)">${navIcon(NAV_ICONS[tab]||'')}</span>${escapeAttr(TAB_LABELS[tab]||'')}
       </div>
+      ${navBackStack.length>0 ? `<button id="navOpenBtn" class="btn btn-outline" style="width:44px;flex-shrink:0;padding:0;font-size:18px">☰</button>` : ''}
     </div>
     ${renderNavOverlay()}
     <div id="tabContent">
@@ -3923,6 +3938,10 @@ function render(){
     <p class="note">داده‌ها فقط روی همین مرورگر و همین فایل ذخیره می‌شوند — برای انتقال بین دستگاه‌ها از بک‌آپ استفاده کن. «ادغام» اطلاعات هر دو دستگاه را نگه می‌دارد (توصیه‌شده)؛ «جایگزینی کامل» همه‌چیز روی این دستگاه را با بک‌آپ عوض می‌کند.</p>
   `;
   document.getElementById('navOpenBtn')?.addEventListener('click', ()=>{ navMenuOpen = true; render(); });
+  document.getElementById('navBackBtn')?.addEventListener('click', ()=>{
+    tab = navBackStack.pop() || 'dashboard';
+    render();
+  });
   document.getElementById('navCloseBtn')?.addEventListener('click', ()=>{ navMenuOpen = false; render(); });
   document.getElementById('navBackdrop')?.addEventListener('click', ()=>{ navMenuOpen = false; render(); });
   document.querySelectorAll('.nav-group-toggle').forEach(el=>{
@@ -3936,6 +3955,7 @@ function render(){
     el.addEventListener('click', e=>{
       tab = e.currentTarget.dataset.tab;
       navMenuOpen = false;
+      navBackStack = []; // این یه ناوبری عمدی و مستقیمه، نه یه میان‌بر — نیازی به دکمه‌ی بازگشت نداره
       render();
     });
   });
