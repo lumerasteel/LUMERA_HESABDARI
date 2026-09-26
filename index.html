@@ -81,16 +81,15 @@
   /* ---- هدر رنگی (بنر گرادیانت با گوشه‌های گرد پایین) — مثل هدر اپ‌های موبایل مرجع، با رنگ خودمون ---- */
   .brand-header{
     background:linear-gradient(135deg, var(--c-accent) 0%, #7A0F1C 65%, var(--c-ink) 130%);
-    margin:calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) 26px;
-    padding:calc(env(safe-area-inset-top,0px) + 10px) var(--sp-4) 20px;
+    margin:calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4)) 24px;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) var(--sp-4) 16px;
     border-radius:0 0 22px 22px;
     box-shadow:0 8px 24px rgba(230,30,50,0.22);
     position:relative;
   }
-  .brand-header h1{color:var(--c-white);font-size:17px;}
-  .brand-header .sub{color:rgba(255,255,255,0.82);margin-bottom:0;font-size:var(--fs-label);}
+  .brand-header h1{color:var(--c-white);font-size:17px;margin:0;}
   /* کارت وضعیت/تب فعلی که روی لبه‌ی پایین هدر رنگی شناور می‌مونه — دقیقاً حس «نوار جستجوی شناور» عکس مرجع */
-  .mobile-nav-bar{margin-top:-16px;position:relative;z-index:2;}
+  .mobile-nav-bar{margin-top:-12px;position:relative;z-index:2;}
   .mobile-nav-bar .card{box-shadow:0 6px 20px rgba(20,22,24,0.14);}
 
   /* ---- Tab bar ---- */
@@ -622,7 +621,7 @@ function blankInvoice(){
     projectNote: '', // یادداشت داخلی پروژه (ابعاد، رنگ، سفارش خاص و...) — فقط داخلی، در خروجی چاپی نمی‌آید
     deliveryDueDate: '', // موعد تحویل (اختیاری) — فقط داخلی، برای یادآور
     activityType: 'lumera', // lumera | drafting
-    lines: [blankInvoiceLine()],
+    lines: [], // عمداً خالی — کاربر باید اول فضای کاری رو خودش انتخاب کنه، وگرنه ممکنه فاکتور اشتباه ثبت بشه
     discountPct: '',
     discountAmount: '',
     paidAmount: '', // فیلد قدیمی — فقط برای سازگاری با فاکتورهای قبل از این نسخه نگه داشته شده
@@ -634,7 +633,7 @@ function blankInvoice(){
     prevBalanceNote: '' // توضیح کوتاه (مثلاً تاریخ و عنوان بدهی قبلی)
   };
 }
-let invActiveWorkspace = 'lumera'; // فضای کاری فعال در ویرایش فاکتور — ردیف‌های جدید با همین نوع فعالیت ساخته می‌شوند
+let invActiveWorkspace = null; // فضای کاری فعال — برای فاکتور جدید، عمداً خالیه تا خودت انتخاب کنی و کالای اشتباه ثبت نشه
 let invDraft = blankInvoice();
 
 
@@ -763,13 +762,12 @@ function renderCalcTab(){
       </label>
       ${calc.useAutoOverhead ? `
         ${overheadPercent==null ? `
-          <p class="note" style="margin:0 0 8px">هنوز درصد سربار تعیین نکرده‌ای. سربار همیشه همین درصد از قیمت تمام‌شده هر محصول است — مستقل از تعداد فروش این ماه</p>
           ${suggestion ? `
             <div class="row-flex" style="margin-bottom:8px;background:#fff;border:1px solid #e5e5e5;border-radius:8px;padding:8px">
               <span style="font-size:12px;flex:1">پیشنهاد بر اساس میانگین ${suggestion.monthsUsed} ماه گذشته: <b>${suggestion.percent}٪</b></span>
               <button id="applySuggestedOverheadBtn" class="btn btn-black" style="font-size:11px;padding:6px 10px">استفاده از این عدد</button>
             </div>
-          ` : `<p class="note" style="margin:0 0 8px">برای پیشنهاد خودکار، چند ماه هم در «هزینه‌ها» هزینه‌های کسب‌وکار و هم در «تاریخچه» محصول ثبت‌شده لازم است</p>`}
+          ` : ''}
           <div class="row-flex">
             <input inputmode="decimal" id="manualOverheadPctInput" placeholder="یا خودت درصد را وارد کن" style="flex:1">
             <button id="setOverheadPctBtn" class="btn btn-outline" style="font-size:12px">ثبت درصد</button>
@@ -1188,7 +1186,7 @@ function invoicePrevBalanceFinal(inv, getBalance){
 
 function newInvoiceFromDraft(){
   invDraft = blankInvoice();
-  invActiveWorkspace = 'lumera';
+  invActiveWorkspace = null;
   editingInvId = null;
   invTab = 'edit';
 }
@@ -1341,7 +1339,6 @@ function renderBankInfoSettings(){
       </div>
       ${isOpen? `
       <div style="padding:0 14px 14px">
-        <p class="note" style="margin-bottom:8px">این اطلاعات پایین هر فاکتور چاپی نشون داده می‌شه. هر وقت شماره کارت یا بانکت عوض شد، همین‌جا اصلاحش کن</p>
         <input id="bankNameInput" placeholder="نام بانک" value="${escapeAttr(bankInfo.bankName)}" style="margin-bottom:8px">
         <input id="bankHolderInput" placeholder="به نام (صاحب حساب)" value="${escapeAttr(bankInfo.accountHolder)}" style="margin-bottom:8px">
         <input id="bankCardInput" placeholder="شماره کارت" value="${escapeAttr(bankInfo.cardNumber)}" style="margin-bottom:8px">
@@ -1536,7 +1533,6 @@ function renderInvoiceEditTab(){
       <label class="small">شماره فاکتور:</label>
       <input id="invNumberInput" type="text" inputmode="numeric" value="${escapeAttr(invDraft.number!=null? invDraft.number : invoiceSeq)}" style="flex:1;font-weight:700">
     </div>
-    <p class="note" style="margin:0 0 4px;text-align:right">روی خروجی چاپی برای مشتری چی نوشته بشه؟ (وضعیت داخلی فاکتور — پیش‌فاکتور/صادرشده/تسویه‌شده — جدا و دست‌نخورده می‌مونه)</p>
     <div class="mode-toggle" style="margin-bottom:12px">
       <button class="btn ${(invDraft.printDocType||'auto')==='auto'?'btn-black':'btn-outline'} invdoctype-btn" data-doctype="auto" style="font-size:11px;padding:6px 4px;min-height:32px">خودکار (بر اساس وضعیت)</button>
       <button class="btn ${invDraft.printDocType==='proforma'?'btn-black':'btn-outline'} invdoctype-btn" data-doctype="proforma" style="font-size:11px;padding:6px 4px;min-height:32px">پیش‌فاکتور</button>
@@ -1567,18 +1563,19 @@ function renderInvoiceEditTab(){
       </div>
     </div>
     <h2 class="sec">اقلام فاکتور</h2>
-    <p class="note" style="margin:0 0 6px;text-align:right">می‌تونی توی یه فاکتور از چند فضای کاری استفاده کنی — هر فضا ردیف‌ها و شرایط و ضوابط خودش رو توی خروجی چاپی جدا نشون می‌ده</p>
     <div class="mode-toggle" style="margin-bottom:8px">
       <button class="btn ${invActiveWorkspace==='lumera'?'btn-black':'btn-outline'} invws-btn" data-ws="lumera" style="font-size:11px;padding:6px 4px;min-height:32px">ساخت LUMERA${invoiceWorkspaceCount(invDraft,'lumera')>0?' ('+invoiceWorkspaceCount(invDraft,'lumera')+')':''}</button>
       <button class="btn ${invActiveWorkspace==='drafting'?'btn-black':'btn-outline'} invws-btn" data-ws="drafting" style="font-size:11px;padding:6px 4px;min-height:32px">نقشه‌کشی${invoiceWorkspaceCount(invDraft,'drafting')>0?' ('+invoiceWorkspaceCount(invDraft,'drafting')+')':''}</button>
       <button class="btn ${invActiveWorkspace==='graphic'?'btn-black':'btn-outline'} invws-btn" data-ws="graphic" style="font-size:11px;padding:6px 4px;min-height:32px">طراحی و گرافیک${invoiceWorkspaceCount(invDraft,'graphic')>0?' ('+invoiceWorkspaceCount(invDraft,'graphic')+')':''}</button>
     </div>
+    ${!invActiveWorkspace ? `<p class="note" style="margin:0 0 8px">اول یکی از سه فضای کاری بالا رو انتخاب کن</p>` : `
     <div id="invLinesWrap">${invDraft.lines.map((l,i)=>({l,i})).filter(x=>(x.l.activityType||invDraft.activityType||'lumera')===invActiveWorkspace).map(x=>renderInvoiceLineRow(x.l,x.i)).join('') || `<p class="note" style="margin:0 0 8px">هنوز ردیفی توی این فضای کاری نیست</p>`}</div>
     <button id="invAddLineBtn" class="btn btn-outline" style="width:100%;margin-bottom:12px">+ افزودن ردیف به همین فضای کاری</button>
+    `}
 
     <h2 class="sec">مانده/بدهی قبلی مشتری</h2>
     <div class="box-gray" style="margin-bottom:12px">
-      ${!invDraft.customerId ? `<p class="note" style="margin:0">برای محاسبه خودکار، ابتدا مشتری را از لیست بالا انتخاب کن. در غیر این صورت فقط حالت دستی قابل استفاده است.</p>` : `
+      ${!invDraft.customerId ? `<p class="note" style="margin:0">اول مشتری رو از بالا انتخاب کن تا مانده خودکار حساب بشه</p>` : `
       <div class="r-row" style="margin-bottom:8px">
         <span>مانده خودکار (از فاکتورها و واریزی‌های قبلی)</span>
         <span class="${prevAuto>0?'accent':(prevAuto<0?'':'')}" style="font-weight:700">${prevAuto>0? fmt(prevAuto)+' ت (بدهکار)' : (prevAuto<0? fmt(-prevAuto)+' ت (بستانکار)' : 'بدون مانده')}</span>
@@ -1761,7 +1758,12 @@ function bindInvoiceEditEvents(){
   bindJalaliDateInput('invDeliveryDueDate', iso=>{ invDraft.deliveryDueDate = iso; });
   document.getElementById('invProjectNote')?.addEventListener('input', e=>{ invDraft.projectNote = e.target.value; });
   document.querySelectorAll('.invws-btn').forEach(el=>{
-    el.addEventListener('click', e=>{ invActiveWorkspace = e.currentTarget.dataset.ws; render(); });
+    el.addEventListener('click', e=>{
+      invActiveWorkspace = e.currentTarget.dataset.ws;
+      // اولین باری که یه فضای کاری انتخاب می‌شه، یه ردیف خالی براش می‌سازیم (مثل قبل که پیش‌فرض داشت)
+      if(invDraft.lines.length===0) invDraft.lines.push(blankInvoiceLine());
+      render();
+    });
   });
   document.querySelectorAll('.invdoctype-btn').forEach(el=>{
     el.addEventListener('click', e=>{ invDraft.printDocType = e.currentTarget.dataset.doctype; render(); });
@@ -2242,7 +2244,6 @@ function renderProductsTab(){
     return categoryName(a).localeCompare(categoryName(b),'fa');
   });
   return `
-    <p class="note" style="margin-bottom:10px">اینجا فرمول محصول (مواد و دستمزد) ذخیره می‌شود تا دفعه بعد لازم نباشه از اول بسازیش. برای ثبت قیمت واقعی هر ماه، از دکمه «ثبت محصول» در تب «محاسبه» استفاده کن — همون‌جاست که وارد «تاریخچه» می‌شود</p>
     <h2 class="sec">دسته‌بندی‌ها</h2>
     <div class="box-gray" style="display:flex;gap:8px;margin-bottom:14px">
       <input id="newCategoryNameInput" placeholder="نام دسته جدید (مثلا سینی، استند شلنگ...)" value="${escapeAttr(newCategoryName)}" style="flex:1">
@@ -2394,15 +2395,13 @@ let historySearchQuery = '';
 let historyListLimit = 10;
 
 function renderHistoryTab(){
-  const note = `<p class="note" style="margin-bottom:10px">این‌جا قیمتِ ثبت‌شده هر محصول در طول زمان نگه‌داری می‌شود — هم برای محاسبه خودکار درصد سربار، هم به‌عنوان آخرین قیمت فروش در فاکتور</p>`;
-  if(records.length===0) return note + `<p class="empty">هنوز هیچ محصولی ثبت نشده</p>`;
+  if(records.length===0) return `<p class="empty">هنوز هیچ محصولی ثبت نشده</p>`;
 
   const q = historySearchQuery.trim().toLowerCase();
   const filtered = q==='' ? records : records.filter(r=> r.name.toLowerCase().includes(q));
   const visible = filtered.slice(0, historyListLimit);
 
   return `
-    ${note}
     <input id="historySearchInput" placeholder="جستجو بر اساس نام محصول..." value="${escapeAttr(historySearchQuery)}" style="margin-bottom:10px">
     ${filtered.length===0? '<p class="empty">محصولی پیدا نشد</p>' : `
       <div class="note" style="margin:0 0 8px;text-align:right">${toPersianDigits(filtered.length)} رکورد</div>
@@ -3074,7 +3073,6 @@ function renderExpAddView(){
 
     <div class="box-gray" style="margin-bottom:16px">
       <div style="font-weight:700;margin-bottom:4px;font-size:13px">${isEditing? 'ویرایش خرج' : 'ثبت خرج'}</div>
-      ${isEditing? '' : `<p class="note" style="margin:0 0 8px">برای خرج‌های ثابت از دکمه‌های بالا انتخاب کن، یا برای خرج‌های روزانه/متغیر (کرایه، قهوه و...) فقط نام را تایپ کن</p>`}
       <input id="expCategoryName" placeholder="نام دسته‌بندی یا خرج (مثلا کرایه ماشین، قهوه)" value="${escapeAttr(expenseDraft.categoryName)}" style="margin-bottom:8px">
       <div class="row-flex" style="margin-bottom:8px">
         <select id="expTag" style="flex:1">
@@ -3093,7 +3091,7 @@ function renderExpAddView(){
       </div>
     </div>
 
-    ${expenseCategories.length===0? `<p class="note" style="margin-bottom:10px">دسته‌بندی ثابتی نداری — از بخش «دسته‌بندی‌ها» یکی بساز تا ثبت خرج سریع‌تر بشه</p>` : ''}
+    ${expenseCategories.length===0? `<p class="note" style="margin-bottom:10px">دسته‌بندی ثابتی نداری — از «دسته‌بندی‌ها» یکی بساز</p>` : ''}
   `;
 }
 
@@ -3145,7 +3143,7 @@ function renderExpCategoriesView(){
         <input id="newCatDefaultAmount" type="text" inputmode="decimal" placeholder="مبلغ پیش‌فرض (اختیاری)" value="${escapeAttr(newCategoryDraft.defaultAmount)}" style="flex:1">
       </div>
       <input id="newCatDueDay" type="text" inputmode="decimal" placeholder="روز سررسید هر ماه (اختیاری — مثلا ۵)" value="${escapeAttr(newCategoryDraft.dueDay)}" style="margin-bottom:8px">
-      <p class="note" style="margin:0 0 8px">اگر روز سررسید را وارد کنی، چند روز قبل از آن در داشبورد یادآوری می‌بینی</p>
+      <p class="note" style="margin:0 0 8px">با ثبت روز سررسید، چند روز قبلش توی یادآورها می‌بینیش</p>
       <div class="row-flex">
         <button id="newCatSaveBtn" class="btn btn-red" style="flex:1">${editingCategoryId? 'ذخیره ویرایش' : 'ذخیره دسته‌بندی'}</button>
         ${editingCategoryId? `<button id="newCatCancelBtn" class="btn btn-outline" style="flex:1">انصراف</button>` : ''}
@@ -3853,7 +3851,6 @@ function render(){
   app.innerHTML = `
     <div class="brand-header">
       <h1>حساب‌داری LUMERASTEEL</h1>
-      <p class="sub">قیمت تمام‌شده، قیمت فروش و سود</p>
     </div>
     <div class="mobile-nav-bar" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       ${navBackStack.length>0 ? `<button id="navBackBtn" class="btn btn-outline" style="flex-shrink:0">→ بازگشت</button>` : ''}
@@ -3872,16 +3869,14 @@ function render(){
       </div>
       <button id="pickFolderBtn" class="btn btn-outline" style="flex:0 0 auto">${downloadDirName?'تغییر پوشه':'انتخاب پوشه'}</button>
       ${downloadDirName? `<button id="clearFolderBtn" class="btn-icon" style="flex:0 0 auto">×</button>` : ''}
-    </div>` : `
-    <p class="note" style="margin-top:20px;border-top:1px solid #eee;padding-top:16px">تعیین پوشه دانلود اختصاصی فقط توی کروم دسکتاپ ممکنه. روی گوشی، از تنظیمات کروم گزینه «قبل از دانلود، محل ذخیره رو بپرس» رو فعال کن تا هر بار بتونی پوشه دلخواه رو انتخاب/بسازی.</p>
-    `}
-    <div class="row-flex backup-row" style="margin-top:12px">
+    </div>` : ''}
+    <div class="row-flex backup-row" style="margin-top:20px;border-top:1px solid #eee;padding-top:16px">
       <button id="downloadBackupBtn" class="btn btn-outline" style="flex:1">دانلود بک‌آپ</button>
       <button id="mergeBackupBtn" class="btn btn-outline" style="flex:1">ادغام بک‌آپ</button>
       <button id="replaceBackupBtn" class="btn btn-outline" style="flex:0 0 auto;color:var(--red);font-size:12px">جایگزینی کامل</button>
       <input type="file" id="backupFileInput" accept=".json" style="display:none">
     </div>
-    <p class="note">داده‌ها فقط روی همین مرورگر و همین فایل ذخیره می‌شوند — برای انتقال بین دستگاه‌ها از بک‌آپ استفاده کن. «ادغام» اطلاعات هر دو دستگاه را نگه می‌دارد (توصیه‌شده)؛ «جایگزینی کامل» همه‌چیز روی این دستگاه را با بک‌آپ عوض می‌کند.</p>
+    <p class="note">«جایگزینی کامل» همه‌چیز روی این دستگاه رو با بک‌آپ عوض می‌کنه — قابل بازگشت نیست.</p>
     ${renderBottomSheet()}
     ${renderBottomTabBar()}
   `;
@@ -3896,6 +3891,7 @@ function render(){
   document.querySelectorAll('[data-nav-tab]').forEach(el=>{
     el.addEventListener('click', ()=>{
       tab = el.dataset.navTab;
+      if(tab==='invoice') invTab = 'list'; // همیشه لیست فاکتورها، نه ادامه‌ی حالت ویرایش قبلی
       navBackStack = []; // ناوبری مستقیم از نوار پایین، مثل منوی قبلی نیازی به دکمه‌ی بازگشت نداره
       render();
     });
